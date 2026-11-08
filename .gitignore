@@ -1,0 +1,17 @@
+# сборка и артефакты
+build/
+*.idsig
+
+# локальные ключи и тулчейн — не в репозиторий
+*.keystore
+toolchain/
+
+# черновики и бэкапы исходников
+*.bak
+*.bak-*
+*.orig
+
+# мусор ОС
+.DS_Store
+Thumbs.db
+desktop.ini

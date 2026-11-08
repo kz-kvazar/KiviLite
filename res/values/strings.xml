@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Мини-лаунчер</string>
+    <string name="source_key_desc">Перехват кнопки выбора источника: открывает панель изображения мини-лаунчера поверх любого экрана.</string>
+</resources>
