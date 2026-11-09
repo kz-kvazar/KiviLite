@@ -12,7 +12,8 @@
 
 | Метрика | Значение |
 |---|---|
-| Размер APK | **49 621 Б** (~49 КБ) |
+| Размер APK | **41 429 Б** (ужатый релиз; отладочный — 49 621 Б) |
+| Размер dex | 58 748 Б после R8 (без ужатия — 74 756 Б) |
 | Исходный код | **2 584** строки Java, 0 XML-разметок |
 | Внешние зависимости | **нет** (только `android.jar`) |
 | Память на телевизоре | **PSS ≈ 11,8 МБ**, RSS ≈ 42 МБ |
@@ -139,13 +140,19 @@ adb -s $A shell "su root pm enable --user 0 com.kivi.launcher_v2"   # + reboot
 ## Сборка
 
 Требуется JDK 8+ и Android SDK (build-tools с `aapt2`, `d8`, `zipalign`, `apksigner`).
-Сборка без Gradle — одним скриптом:
+Сборка без Gradle:
 
 ```powershell
-# Пути к JDK, Android SDK и ключу правятся в начале build.ps1
-powershell -ExecutionPolicy Bypass -File build.ps1
-# → MiniHome.apk
+# Отладочная сборка (d8, без ужатия): build.ps1
+powershell -ExecutionPolicy Bypass -File build.ps1        # -> MiniHome.apk
+
+# Ужатый релиз (R8: переименование, вырезание неиспользуемого, deflate 9):
+bash build-release.sh                                     # -> MiniHome-release.apk
 ```
+
+Правила ужатия — `r8-rules.pro` (точки входа из манифеста сохраняются, вендорский API
+не требует правил: он вызывается по строкам). Релизная сборка дополнительно **не включает**
+служебный `ApiProbeActivity` и его запись в манифесте.
 
 Свой ключ подписи:
 
@@ -158,7 +165,9 @@ keytool -genkeypair -keystore my.keystore -alias lite -keyalg RSA -keysize 2048 
 
 ```
 AndroidManifest.xml                     HOME-активность, служба SOURCE, права
-build.ps1                               сборка: aapt2 → javac → d8 → zipalign → apksigner
+build.ps1                               отладочная сборка: aapt2 → javac → d8 → zipalign → apksigner
+build-release.sh                        ужатый релиз: то же, но вместо d8 — R8 + deflate 9
+r8-rules.pro                            правила ужатия (что нельзя вырезать и переименовывать)
 res/values/strings.xml                  название приложения и описание службы
 res/xml/source_keys.xml                 конфиг службы доступности (перехват клавиш)
 src/com/minihome/tv/MainActivity.java   главный экран: шапка, плитки, сетка, режим изменения

@@ -1657,7 +1657,7 @@ public class MainActivity extends Activity {
 
                 tv = new TextView(MainActivity.this);
                 tv.setTextColor(TEXT_MAIN);
-                tv.setTextSize(15f);
+                tv.setTextSize(20f);
                 tv.setGravity(Gravity.CENTER);
                 tv.setMaxLines(2);
                 tv.setEllipsize(TextUtils.TruncateAt.END);
