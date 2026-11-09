@@ -15,3 +15,6 @@ toolchain/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# артефакты ужатой сборки
+build-release/
