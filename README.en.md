@@ -6,23 +6,45 @@ A lightweight replacement for the vendor shell on cheap Android TV boxes and TVs
 (MStar / Kivi / Funshion, Android 5–7). Built and verified on an **LG 43UK32G**
 (MStar, Android 6.0.1, API 23, 1920×1080, density 320).
 
+**Version 1.1 is final.** The project is not developed further: everything such a TV
+needs is already done and verified on real hardware.
+
 The point: a launcher that **wastes neither RAM nor CPU**. No libraries, no XML
 layouts, not a single bitmap — every icon and every background is drawn in code
 on a `Canvas`.
 
 | Metric | Value |
 |---|---|
-| APK size | **49,621 B** (~49 KB) |
-| Source | **2,584** lines of Java, 0 XML layouts |
+| APK size | **41,429 B** (~40 KB, minified release) |
+| dex size | **62,092 B** after R8 |
+| Source | **2,787** lines of Java, 0 XML layouts |
 | External dependencies | **none** (only `android.jar`) |
-| Memory on the TV | **PSS ≈ 11.8 MB**, RSS ≈ 42 MB |
+| Memory on the TV | **PSS ≈ 12.4 MB** (private dirty ≈ 8 MB) |
 | Idle CPU | **≈ 0%** (never shows up in `dumpsys cpuinfo`) |
 | Vendor `com.kivi.launcher_v2` for comparison | ≈ 90 MB RSS |
 | Free RAM after the swap | ≈ 253 MB (was ≈ 45 MB) |
 | minSdk / targetSdk | 21 / 23 |
 | License | MIT |
 
+## Screenshots
+
+**Home screen** — weather, rates (USD/UAH, EUR/UAH, BTC/USD, ETH/USD), clock and date,
+quick-access tiles and the app grid:
+
 ![Home screen](docs/screenshots/home.png)
+
+**Edit mode** — cards get a frame, OK opens the app menu instead of launching:
+
+![Edit mode](docs/screenshots/edit-mode.png)
+
+**App menu** — delete, hide, or bring back to the home screen (nothing is deleted silently):
+
+![App menu](docs/screenshots/app-menu.png)
+
+**Signal source panel** — opened by the TV/HDMI tile:
+
+![Source panel](docs/screenshots/source-panel.png)
+
 
 ## Features
 

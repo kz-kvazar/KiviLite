@@ -63,26 +63,97 @@ public class PicturePanelActivity extends Activity {
     private long lastApply = 0L;
     private final StringBuilder log = new StringBuilder();
 
+    /** Пользователь уже двигал значения: фоновое чтение не должно их перезаписывать. */
+    private volatile boolean touched = false;
+    /** Фоновое чтение уже идёт. */
+    private volatile boolean loading = false;
+
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
-        findManager();
-        readValues();
+        // Сначала кэш и интерфейс: панель появляется сразу, без обращения к API телевизора.
+        loadCached();
         buildUi();
-        saveLog();
+        visible = true;         // панель уже на экране — повторное нажатие SOURCE её закроет
+        instance = this;
+        // Медленная часть (отражение, провайдер ТВ, база) уходит в фон, первый кадр не ждёт её.
+        refreshInBackground();
     }
 
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        // Повторное нажатие кнопки на пульте просто обновляет панель.
-        findManager();
-        readValues();
-        for (int i = 0; i < valueViews.size(); i++) {
+        // Повторное открытие поверх уже видимой панели: значения обновляем в фоне.
+        refreshInBackground();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (instance == this) {
+            instance = null;
+            visible = false;
+        }
+    }
+
+    /** Кэш прошлого запуска: панель рисуется мгновенно, пока читаются настоящие значения. */
+    private void loadCached() {
+        try {
+            SharedPreferences sp = getSharedPreferences(PREFS, 0);
+            for (int i = 0; i < COLUMN.length; i++) value[i] = sp.getInt(COLUMN[i], DEFAULTS[i]);
+            srcType = sp.getInt("srcType", srcType);
+            modeType = sp.getInt("modeType", modeType);
+            log.append("из кэша: подсветка=").append(value[0]).append('\n');
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void saveCached() {
+        try {
+            SharedPreferences.Editor e = getSharedPreferences(PREFS, 0).edit();
+            for (int i = 0; i < COLUMN.length; i++) e.putInt(COLUMN[i], value[i]);
+            e.putInt("srcType", srcType);
+            e.putInt("modeType", modeType);
+            e.apply();
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /** Обновляет подписи и полоски по текущим значениям. */
+    private void refreshValues() {
+        for (int i = 0; i < valueViews.size() && i < value.length; i++) {
             valueViews.get(i).setText(String.valueOf(value[i]));
             bars.get(i).setValue(value[i]);
         }
-        saveLog();
+    }
+
+    /** Медленное чтение в фоне; интерфейс обновляется уже на UI-потоке. */
+    private void refreshInBackground() {
+        if (loading) return;
+        loading = true;
+        new Thread(new Runnable() {
+            public void run() {
+                final int[] fresh;
+                try {
+                    findManager();
+                    fresh = readValues();
+                } catch (Throwable t) {
+                    loading = false;
+                    return;
+                }
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        if (!touched) {
+                            for (int i = 0; i < value.length; i++) value[i] = fresh[i];
+                            refreshValues();
+                        }
+                        saveCached();
+                        saveLog();
+                        loading = false;
+                    }
+                });
+            }
+        }, "picpanel-refresh").start();
     }
 
     // ------------------------- работа с API телевизора -------------------------
@@ -99,8 +170,14 @@ public class PicturePanelActivity extends Activity {
         }
     }
 
-    private void readValues() {
+    /**
+     * Читает настоящие значения из базы телевизора. Выполняется в фоновом потоке,
+     * поэтому ничего не пишет в интерфейс — возвращает массив, применяет его вызывающий.
+     */
+    private int[] readValues() {
         resolveContext();
+        int[] out = new int[COLUMN.length];
+        for (int i = 0; i < out.length; i++) out[i] = value[i];
         Cursor c = null;
         try {
             c = getContentResolver().query(Uri.parse(AUTHORITY), null,
@@ -119,17 +196,18 @@ public class PicturePanelActivity extends Activity {
             if (c != null && c.getCount() > 0 && c.getPosition() >= 0) {
                 for (int i = 0; i < COLUMN.length; i++) {
                     int idx = c.getColumnIndex(COLUMN[i]);
-                    if (idx >= 0) value[i] = c.getInt(idx);
+                    if (idx >= 0) out[i] = c.getInt(idx);
                 }
-                log.append("прочитано: подсветка=").append(value[0]).append(" яркость=").append(value[1])
-                        .append(" контрастность=").append(value[2]).append(" насыщенность=").append(value[3])
-                        .append(" резкость=").append(value[4]).append(" оттенок=").append(value[5]).append('\n');
+                log.append("прочитано: подсветка=").append(out[0]).append(" яркость=").append(out[1])
+                        .append(" контрастность=").append(out[2]).append(" насыщенность=").append(out[3])
+                        .append(" резкость=").append(out[4]).append(" оттенок=").append(out[5]).append('\n');
             }
         } catch (Throwable t) {
             log.append("чтение базы: ошибка ").append(t).append('\n');
         } finally {
             if (c != null) c.close();
         }
+        return out;
     }
 
     /** Текущий источник и режим изображения — по ним выбирается строка в базе телевизора. */
@@ -269,6 +347,7 @@ public class PicturePanelActivity extends Activity {
                     if (e.getAction() != KeyEvent.ACTION_DOWN) return false;
                     if (code == KeyEvent.KEYCODE_DPAD_LEFT || code == KeyEvent.KEYCODE_DPAD_RIGHT) {
                         int step = (code == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1);
+                        touched = true;     // ручная правка важнее фонового чтения
                         value[idx] = Math.max(0, Math.min(100, value[idx] + step));
                         valueViews.get(idx).setText(String.valueOf(value[idx]));
                         bars.get(idx).setValue(value[idx]);
@@ -372,7 +451,13 @@ public class PicturePanelActivity extends Activity {
     protected void onPause() {
         super.onPause();
         visible = false;
-        saveLog();          // журнал пишем при уходе с панели, чтобы не трогать диск на каждое нажатие
+        saveCached();
+        // Журнал пишем при уходе с панели и в фоне, чтобы не трогать диск на каждое нажатие.
+        new Thread(new Runnable() {
+            public void run() {
+                saveLog();
+            }
+        }, "picpanel-log").start();
     }
 
     /** Закрыть панель по повторному нажатию кнопки SOURCE. */

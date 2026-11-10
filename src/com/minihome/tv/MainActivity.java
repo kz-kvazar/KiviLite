@@ -2,10 +2,12 @@ package com.minihome.tv;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
@@ -1148,16 +1150,49 @@ public class MainActivity extends Activity {
         root.addView(grid, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         setContentView(root);
+        // Следим за установкой и удалением приложений: только тогда и пересобираем список.
+        IntentFilter pkgFilter = new IntentFilter();
+        pkgFilter.addAction(Intent.ACTION_PACKAGE_ADDED);
+        pkgFilter.addAction(Intent.ACTION_PACKAGE_REMOVED);
+        pkgFilter.addAction(Intent.ACTION_PACKAGE_CHANGED);
+        pkgFilter.addAction(Intent.ACTION_PACKAGE_REPLACED);
+        pkgFilter.addDataScheme("package");
+        try {
+            registerReceiver(pkgReceiver, pkgFilter);
+        } catch (Throwable ignored) {
+        }
         loadApps();
         updateClock();
         updateNetwork();
     }
 
     @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        try {
+            unregisterReceiver(pkgReceiver);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /**
+     * Система просит освободить память — отдаём кэши значков и названий.
+     * Они восстановятся сами, а держать в лаунчере десятки мегабайт картинок незачем.
+     */
+    @Override
+    public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (level >= TRIM_MEMORY_RUNNING_LOW) {
+            iconCache.clear();
+            labelText.clear();
+            labelCache.clear();
+        }
+    }
+
+    @Override
     protected void onResume() {
         super.onResume();
-        ensureSourceKeyEnabled();
-        loadApps();
+        if (appsDirty) loadApps();       // перебор приложений только при изменениях
         updateClock();
         updateNetwork();
         refreshWeatherIfStale();
@@ -1582,11 +1617,27 @@ public class MainActivity extends Activity {
      * список вообще не перебирается.
      */
     private final java.util.HashMap<String, String> labelCache = new java.util.HashMap<String, String>();
+    /** Названия для показа на карточках (в исходном регистре) — чтобы не звать loadLabel каждый раз. */
+    private final java.util.HashMap<String, String> labelText = new java.util.HashMap<String, String>();
     private final java.util.HashMap<String, Drawable> iconCache = new java.util.HashMap<String, Drawable>();
     private String appsSignature = null;
 
+    /**
+     * Список приложений меняется редко, а перебор установленных программ (queryIntentActivities)
+     * — один из самых дорогих вызовов к системе. Поэтому пересобираем список не на каждом
+     * возврате на главный экран, а только когда система сама сообщила об установке или удалении.
+     */
+    private boolean appsDirty = true;
+    private final BroadcastReceiver pkgReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context c, Intent i) {
+            appsDirty = true;
+        }
+    };
+
     private void loadApps() {
-        PackageManager pm = getPackageManager();
+        appsDirty = false;
+        PackageManager pm = pkgMgr();
         Intent main = new Intent(Intent.ACTION_MAIN);
         main.addCategory(Intent.CATEGORY_LAUNCHER);
         List<ResolveInfo> found = pm.queryIntentActivities(main, 0);
@@ -1604,6 +1655,7 @@ public class MainActivity extends Activity {
         }
         appsSignature = sig.toString();
         iconCache.clear();
+        labelText.clear();      // обновилось приложение — название могло измениться
 
         apps.clear();
         for (int i = 0; i < found.size(); i++) {
@@ -1634,112 +1686,178 @@ public class MainActivity extends Activity {
         updateHiddenChip();
     }
 
+    /**
+     * Держатель элементов карточки. Слушатели, контур тени и фон ставятся один раз при создании
+     * строки, а не на каждую перерисовку — раньше на каждый вызов getView создавалось три
+     * слушателя, OutlineProvider и Drawable, и это било по памяти и по плавности прокрутки.
+     */
+    private static class Holder {
+        LinearLayout box;
+        ImageView img;
+        TextView tv;
+        int position;
+        String pkg;
+        String label;
+        boolean bgEdit;
+        boolean bgHidden;
+        boolean hasBg;
+    }
+
+    /** PackageManager берём один раз: каждый вызов getPackageManager() — обращение к системе. */
+    private PackageManager pmCache;
+
+    private PackageManager pkgMgr() {
+        if (pmCache == null) pmCache = getPackageManager();
+        return pmCache;
+    }
+
     private class AppAdapter extends BaseAdapter {
+        /** Слушатели создаются вместе с адаптером и переиспользуются всеми карточками. */
+        private final View.OnClickListener click = new View.OnClickListener() {
+            public void onClick(View v) {
+                Holder h = (Holder) v.getTag();
+                if (editMode) appMenuOnce(h.position);
+                else openApp(h.position);
+            }
+        };
+        private final View.OnLongClickListener longClick = new View.OnLongClickListener() {
+            public boolean onLongClick(View v) {
+                appMenuOnce(((Holder) v.getTag()).position);
+                return true;
+            }
+        };
+        private final View.OnFocusChangeListener focus = new View.OnFocusChangeListener() {
+            public void onFocusChange(View view, boolean has) {
+                if (has) lastWasGrid = false;
+                if (android.os.Build.VERSION.SDK_INT >= 21) view.setElevation(has ? dp(6) : 0f);
+            }
+        };
+        /** Пульт: MENU — действия для приложения; ОК, удержанное дольше LONG_PRESS_MS, — тоже меню. */
+        private final View.OnKeyListener key = new View.OnKeyListener() {
+            public boolean onKey(View v, int code, KeyEvent ev) {
+                final Holder h = (Holder) v.getTag();
+                if (code == KeyEvent.KEYCODE_MENU || code == KeyEvent.KEYCODE_BUTTON_Y
+                        || code == KeyEvent.KEYCODE_PROG_RED) {
+                    if (ev.getAction() == KeyEvent.ACTION_DOWN) appMenu(h.position);
+                    return true;
+                }
+                boolean okKey = code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER
+                        || code == KeyEvent.KEYCODE_NUMPAD_ENTER;
+                if (!okKey) return false;
+                if (ev.getAction() == KeyEvent.ACTION_DOWN) {
+                    if (pendingLong == null) {
+                        final int pos = h.position;
+                        menuShown = false;
+                        pendingLong = new Runnable() {
+                            public void run() {
+                                pendingLong = null;
+                                menuShown = true;
+                                appMenuOnce(pos);
+                            }
+                        };
+                        handler.postDelayed(pendingLong, LONG_PRESS_MS);
+                    }
+                    return false;
+                }
+                cancelPendingLong();
+                if (menuShown) {
+                    menuShown = false;
+                    return true;
+                }
+                return false;
+            }
+        };
+
         public int getCount() { return apps.size(); }
         public Object getItem(int p) { return apps.get(p); }
         public long getItemId(int p) { return p; }
 
-        public View getView(final int position, View convert, ViewGroup parent) {
-            LinearLayout ll;
-            ImageView img;
-            TextView tv;
+        public View getView(int position, View convert, ViewGroup parent) {
+            Holder h;
             if (convert == null) {
-                ll = new LinearLayout(MainActivity.this);
+                h = new Holder();
+                LinearLayout ll = new LinearLayout(MainActivity.this);
                 ll.setOrientation(LinearLayout.VERTICAL);
                 ll.setGravity(Gravity.CENTER);
                 ll.setFocusable(true);
-                ll.setBackgroundDrawable(appCard());
+                ll.setClickable(true);
+                ll.setLongClickable(true);
                 ll.setPadding(dp(6), dp(0), dp(6), dp(0));
+                ll.setTag(h);
+                ll.setOnClickListener(click);
+                ll.setOnLongClickListener(longClick);
+                ll.setOnKeyListener(key);
+                ll.setOnFocusChangeListener(focus);
+                if (android.os.Build.VERSION.SDK_INT >= 21) {
+                    ll.setOutlineProvider(new android.view.ViewOutlineProvider() {
+                        @Override
+                        public void getOutline(View view, android.graphics.Outline outline) {
+                            outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(14));
+                        }
+                    });
+                    ll.setClipToOutline(false);
+                }
 
-                img = new ImageView(MainActivity.this);
+                ImageView img = new ImageView(MainActivity.this);
                 img.setLayoutParams(new LinearLayout.LayoutParams(dp(112), dp(112)));
                 ll.addView(img);
 
-                tv = new TextView(MainActivity.this);
+                TextView tv = new TextView(MainActivity.this);
                 tv.setTextColor(TEXT_MAIN);
                 tv.setTextSize(20f);
                 tv.setGravity(Gravity.CENTER);
                 tv.setMaxLines(2);
                 tv.setEllipsize(TextUtils.TruncateAt.END);
-                tv.setPadding(0, dp(0), 0, 0);
                 ll.addView(tv);
-                ll.setTag(new View[]{img, tv});
+
+                h.box = ll;
+                h.img = img;
+                h.tv = tv;
+                convert = ll;
             } else {
-                ll = (LinearLayout) convert;
-                View[] tag = (View[]) ll.getTag();
-                img = (ImageView) tag[0];
-                tv = (TextView) tag[1];
+                h = (Holder) convert.getTag();
             }
-            ll.setClickable(true);
-            ll.setOnClickListener(new View.OnClickListener() {
-                public void onClick(View v) {
-                    if (editMode) appMenuOnce(position);
-                    else openApp(position);
-                }
-            });
-            ll.setLongClickable(true);
-            ll.setOnLongClickListener(new View.OnLongClickListener() {
-                public boolean onLongClick(View v) {
-                    appMenuOnce(position);
-                    return true;
-                }
-            });
-            addFocusFx(ll);
-            // Пульт: кнопка MENU на приложении — действия именно для него; ОК, удержанное
-            // дольше LONG_PRESS_MS, тоже открывает меню, короткое нажатие запускает приложение.
-            ll.setOnKeyListener(new View.OnKeyListener() {
-                public boolean onKey(View v, int code, KeyEvent ev) {
-                    if (code == KeyEvent.KEYCODE_MENU || code == KeyEvent.KEYCODE_BUTTON_Y
-                            || code == KeyEvent.KEYCODE_PROG_RED) {
-                        if (ev.getAction() == KeyEvent.ACTION_DOWN) appMenu(position);
-                        return true;
-                    }
-                    boolean okKey = code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER
-                            || code == KeyEvent.KEYCODE_NUMPAD_ENTER;
-                    if (!okKey) return false;
-                    if (ev.getAction() == KeyEvent.ACTION_DOWN) {
-                        // Повторы приходят с ненулевым repeatCount — расписание ставим на любое нажатие.
-                        if (pendingLong == null) {
-                            menuShown = false;
-                            pendingLong = new Runnable() {
-                                public void run() {
-                                    pendingLong = null;
-                                    menuShown = true;
-                                    appMenuOnce(position);
-                                }
-                            };
-                            handler.postDelayed(pendingLong, LONG_PRESS_MS);
-                        }
-                        return false;
-                    }
-                    cancelPendingLong();
-                    if (menuShown) {
-                        menuShown = false;
-                        return true;
-                    }
-                    return false;
-                }
-            });
+
+            h.position = position;
             ResolveInfo ri = apps.get(position);
-            PackageManager pm = getPackageManager();
-            String label = String.valueOf(ri.loadLabel(pm));
-            Drawable icon = iconCache.get(ri.activityInfo.packageName);
-            if (icon == null) {
-                icon = ri.loadIcon(pm);         // значок грузим один раз и держим в кэше
-                iconCache.put(ri.activityInfo.packageName, icon);
+            String pkg = ri.activityInfo.packageName;
+            // Название и значок читаем только при смене приложения в этой ячейке.
+            if (!pkg.equals(h.pkg)) {
+                h.pkg = pkg;
+                String label = labelText.get(pkg);
+                if (label == null) {
+                    label = String.valueOf(ri.loadLabel(pkgMgr()));
+                    labelText.put(pkg, label);
+                }
+                h.label = label;
+                Drawable icon = iconCache.get(pkg);
+                if (icon == null) {
+                    icon = ri.loadIcon(pkgMgr());     // значок грузим один раз и держим в кэше
+                    iconCache.put(pkg, icon);
+                }
+                h.img.setImageDrawable(icon);
+                h.hasBg = false;                       // новая карточка — новый фон
             }
-            img.setImageDrawable(icon);
             if (editMode) {
-                boolean hid = hidden.contains(ri.activityInfo.packageName);
-                tv.setText(label + (hid ? S_HIDDEN[lang()] : ""));
-                tv.setTextColor(hid ? TEXT_DIM : TEXT_MAIN);
-                ll.setBackgroundDrawable(editCard(hid));
+                boolean hid = hidden.contains(pkg);
+                h.tv.setText(h.label + (hid ? S_HIDDEN[lang()] : ""));
+                h.tv.setTextColor(hid ? TEXT_DIM : TEXT_MAIN);
+                if (!h.hasBg || !h.bgEdit || h.bgHidden != hid) {
+                    h.box.setBackgroundDrawable(editCard(hid));
+                    h.bgEdit = true;
+                    h.bgHidden = hid;
+                    h.hasBg = true;
+                }
             } else {
-                tv.setText(label);
-                tv.setTextColor(TEXT_MAIN);
-                ll.setBackgroundDrawable(appCard());
+                h.tv.setText(h.label);
+                h.tv.setTextColor(TEXT_MAIN);
+                if (!h.hasBg || h.bgEdit) {
+                    h.box.setBackgroundDrawable(appCard());
+                    h.bgEdit = false;
+                    h.hasBg = true;
+                }
             }
-            return ll;
+            return h.box;
         }
     }
 }

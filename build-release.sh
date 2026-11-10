@@ -57,5 +57,5 @@ PY
 "$BT/zipalign.exe" -f 4 "$OUT/with-dex-max.apk" "$OUT/aligned.apk"
 "$BT/apksigner.bat" sign --ks "$KS" --ks-pass pass:litelauncher --out "$P/MiniHome-release.apk" "$OUT/aligned.apk"
 
-echo "=== итог:"; ls -l "$P/MiniHome-release.apk" "$P/MiniHome.apk"
+echo "=== итог:"; ls -l "$P/MiniHome-release.apk"
 unzip -l "$P/MiniHome-release.apk" | tail -8
