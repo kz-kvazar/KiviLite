@@ -1799,7 +1799,7 @@ public class MainActivity extends Activity {
                 }
 
                 ImageView img = new ImageView(MainActivity.this);
-                img.setLayoutParams(new LinearLayout.LayoutParams(dp(112), dp(112)));
+                img.setLayoutParams(new LinearLayout.LayoutParams(dp(104), dp(104)));
                 ll.addView(img);
 
                 TextView tv = new TextView(MainActivity.this);
