@@ -642,13 +642,23 @@ public class MainActivity extends Activity {
         /** Во сколько раз уменьшаем кадр: узор из плавных градиентов, мельчить не страшно. */
         private static final int SCALE = 8;
         /** Сколько шагов проявляется следующий кадр: больше — мягче переход. */
-        private static final int STEPS = 4;
+        // Сколько шагов проявляется следующий кадр. Шаг идёт раз в кадр экрана (16,7 мс),
+        // поэтому 12 шагов — мягкое проявление за 0,2 с. При 4 шагах (по 25% за раз) смена
+        // кадра читается глазом как рывок, даже если самих кадров много.
+        private static final int STEPS = 12;
 
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         private android.graphics.Bitmap[] frames;
         private int cacheW, cacheH, frameIdx;
         /** Плотность перехода к следующему кадру: 0 — только текущий, 1 — уже следующий. */
         private float blend;
+        /**
+         * Непрерывная фаза движения в кадрах: целая часть — номер кадра, дробная — плотность
+         * перехода к следующему. Так плавность (сколько шагов на кадр) и скорость (сколько
+         * кадров в секунду) независимы: раньше они были связаны одним счётчиком, и плавный
+         * переход автоматически растягивал весь цикл.
+         */
+        private float pos;
         /** Сколько кадров уже готово (пишется из фонового потока, читается на экране). */
         private volatile int readyCount;
 
@@ -683,13 +693,16 @@ public class MainActivity extends Activity {
          * Стоит это две копии картинки — процессор почти свободен, зато движение без рывков.
          */
         void nextStep() {
-            if (frames == null) return;
-            blend += 1f / STEPS;
-            if (blend >= 1f) {
-                blend = 0f;
-                int next = (frameIdx + 1) % FRAMES;
-                if (next < readyCount) frameIdx = next;   // кадр ещё рисуется — стоим на текущем
+            if (frames == null || readyCount < 2) return;
+            pos += 1f / STEPS;                 // 12 шагов на кадр — смена кадров без ступенек
+            if (pos >= FRAMES) pos -= FRAMES;  // замкнутый цикл
+            int idx = (int) pos;
+            if (idx >= readyCount) {           // нужный кадр ещё рисуется — стоим на последнем готовом
+                pos = readyCount - 1;
+                idx = readyCount - 1;
             }
+            frameIdx = idx;
+            blend = pos - idx;                 // дробная часть — плотность перехода
             invalidateSelf();
         }
 
