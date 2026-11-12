@@ -652,7 +652,8 @@ public class MainActivity extends Activity {
         /** Доля времени кадра на переход: 1 — переход идёт весь кадр, статики нет. */
         private static final float MOVE_PART = 1f;
         /** Разница между соседними кадрами набора — минимальная, 1% периода волны. */
-        private static final float PHASE_STEP = 0.01f;
+        // Разброс между кадрами набора уменьшен вдвое (было 0,01).
+        private static final float PHASE_STEP = 0.005f;
         private static final float CYCLE_SECONDS = FRAMES * FRAME_MS / 1000f;
 
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
