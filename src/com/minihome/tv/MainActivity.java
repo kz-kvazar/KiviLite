@@ -120,7 +120,7 @@ public class MainActivity extends Activity {
     private final Runnable bgTick = new Runnable() {
         public void run() {
             if (bg != null) bg.nextStep();
-            handler.postDelayed(this, 55);    // цикл около 4,4 с: спокойнее и плавнее
+            handler.postDelayed(this, 60);    // цикл около 8,6 с: неспешное движение
         }
     };
     private Set<String> hidden = new HashSet<String>();
@@ -638,7 +638,7 @@ public class MainActivity extends Activity {
     /** Фон лаунчера: тёмное небо, занавеси северного сияния и мягкое затухание к низу. */
     private class BgDrawable extends Drawable {
         /** Сколько кадров в цикле движения: больше — плавнее, но и памяти больше. */
-        private static final int FRAMES = 20;
+        private static final int FRAMES = 36;
         /** Во сколько раз уменьшаем кадр: узор из плавных градиентов, мельчить не страшно. */
         private static final int SCALE = 8;
         /** Сколько шагов проявляется следующий кадр: больше — мягче переход. */
@@ -761,8 +761,8 @@ public class MainActivity extends Activity {
             // Общее свечение неба — медленно дышит. Центр держим на трети высоты, а не на
             // верхней кромке: свет, бивший из кромки, засвечивал верхний угол постоянно,
             // и углы по краям экрана оставались светлее всего остального.
-            int glowA = (int) (0x14 * (0.55f + 0.45f * (float) Math.sin(phase * 2 * Math.PI)));
-            if (glowA < 3) glowA = 3;
+            int glowA = (int) (0x18 * (0.5f + 0.5f * (float) Math.sin(phase * 2 * Math.PI)));
+            if (glowA < 0) glowA = 0;   // гаснет полностью: постоянной засветки на экране нет
             paint.setShader(new RadialGradient(w * 0.5f, h * 0.44f, w * 1.05f,
                     new int[]{(glowA << 24) | 0x5FE8C0, 0x00000000}, null, Shader.TileMode.CLAMP));
             canvas.drawRect(b, paint);
@@ -813,8 +813,8 @@ public class MainActivity extends Activity {
             cxF += 0.006f * ripple;                                  // в стороны — почти незаметно
             hwF *= (1f + 0.16f * breathe);                           // ширина дышит заметнее
             botF += 0.105f * pulse;                                  // лучи ходят по высоте
-            int a = (int) (alpha * (0.52f + 0.48f * (pulse * 0.5f + 0.5f)));
-            a = (int) (a * (0.88f + 0.12f * (wave * 0.5f + 0.5f)));  // и вдоль полосы бежит волна
+            int a = (int) (alpha * (0.28f + 0.72f * (pulse * 0.5f + 0.5f)));
+            a = (int) (a * (0.70f + 0.30f * (wave * 0.5f + 0.5f)));  // и вдоль полосы бежит волна
             if (a < 4) a = 4;
             if (a > 255) a = 255;
 
