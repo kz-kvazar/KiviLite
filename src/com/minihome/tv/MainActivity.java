@@ -122,9 +122,9 @@ public class MainActivity extends Activity {
         public void run() {
             if (bg == null) return;
             tick++;
-            if (tick % 15 == 0) bg.nextFrame();   // смена кадра раз в 255 мс
+            if (tick % 10 == 0) bg.nextFrame();   // смена кадра раз в 255 мс
             else bg.fadeStep();                    // в промежутке — плавное проявление и затухание
-            handler.postDelayed(this, 17);
+            handler.postDelayed(this, 25);         // 40 обновлений/с; было 60 — нагрузка втрое выше
         }
     };
     private Set<String> hidden = new HashSet<String>();
@@ -699,7 +699,7 @@ public class MainActivity extends Activity {
         /** Шаг перехода: старый кадр гаснет, новый проявляется. Вызывается каждый кадр экрана. */
         void fadeStep() {
             if (blend >= 1f) return;
-            blend += 1f / 15f;                   // 15 шагов по 17 мс ≈ 255 мс
+            blend += 1f / 10f;                   // 10 шагов по 25 мс ≈ 255 мс — та же длительность
             if (blend > 1f) blend = 1f;
             invalidateSelf();
         }
