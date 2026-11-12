@@ -118,9 +118,13 @@ public class MainActivity extends Activity {
     private final Handler handler = new Handler();
     /** Живая аврора: пока лаунчер на экране, кадры фона сменяются по таймеру. */
     private final Runnable bgTick = new Runnable() {
+        private int tick;
         public void run() {
-            if (bg != null) bg.nextFrame();
-            handler.postDelayed(this, 250);   // 20 кадров по 0,25 с — цикл 5 секунд
+            if (bg == null) return;
+            tick++;
+            if (tick % 15 == 0) bg.nextFrame();   // смена кадра раз в 255 мс
+            else bg.fadeStep();                    // в промежутке — плавное проявление и затухание
+            handler.postDelayed(this, 17);
         }
     };
     private Set<String> hidden = new HashSet<String>();
@@ -647,6 +651,9 @@ public class MainActivity extends Activity {
         private int cacheW, cacheH, frameIdx;
         /** Сколько кадров уже готово (пишется из фонового потока, читается на экране). */
         private volatile int readyCount;
+        /** Предыдущий кадр и плотность перехода к текущему: старый гаснет, новый проявляется. */
+        private int prevIdx;
+        private float blend = 1f;
 
         @Override
         public void draw(Canvas canvas) {
@@ -655,11 +662,21 @@ public class MainActivity extends Activity {
                 buildFrames(b.width(), b.height());
             }
             android.graphics.Bitmap shown = frames == null ? null : frames[frameIdx];
-            if (shown != null) {
-                canvas.drawBitmap(shown, null, b, paint);   // кадр готов — просто копируем
+            if (shown == null) {
+                paintBackground(canvas, b, 0f);
                 return;
             }
-            paintBackground(canvas, b, 0f);
+            android.graphics.Bitmap prev = frames[prevIdx];
+            if (prev != null && prev != shown && blend < 1f) {
+                // Новый кадр — основа, старый поверх него гаснет: у старого прозрачность растёт,
+                // у нового падает. Поэтому смена картинки идёт мягко, а не подменой кадра.
+                canvas.drawBitmap(shown, null, b, paint);
+                paint.setAlpha((int) (255 * (1f - blend)));
+                canvas.drawBitmap(prev, null, b, paint);
+                paint.setAlpha(255);
+                return;
+            }
+            canvas.drawBitmap(shown, null, b, paint);
         }
 
         /**
@@ -670,7 +687,17 @@ public class MainActivity extends Activity {
             if (frames == null) return;
             int next = (frameIdx + 1) % FRAMES;
             if (next >= readyCount) return;      // кадр ещё рисуется — стоим на текущем
+            prevIdx = frameIdx;
             frameIdx = next;
+            blend = 0f;                          // начинаем переход прозрачности
+            invalidateSelf();
+        }
+
+        /** Шаг перехода: старый кадр гаснет, новый проявляется. Вызывается каждый кадр экрана. */
+        void fadeStep() {
+            if (blend >= 1f) return;
+            blend += 1f / 15f;                   // 15 шагов по 17 мс ≈ 255 мс
+            if (blend > 1f) blend = 1f;
             invalidateSelf();
         }
 
