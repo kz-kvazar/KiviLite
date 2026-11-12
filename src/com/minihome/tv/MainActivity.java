@@ -641,16 +641,16 @@ public class MainActivity extends Activity {
         // Длительность цикла = FRAMES × STEPS кадров экрана. При 60×12 цикл растягивался до
         // 12 секунд, и рисунок за один шаг менялся всё равно заметно. 30 кадров при 12 шагах
         // дают цикл 6 с и шаг всего 8% — движение читается как сплошное.
-        private static final int FRAMES = 6;
+        private static final int FRAMES = 28;
         /** Во сколько раз уменьшаем кадр: узор из плавных градиентов, мельчить не страшно. */
         private static final int SCALE = 8;
         /** Сколько шагов проявляется следующий кадр: больше — мягче переход. */
         /** За сколько секунд фон проходит полный круг — независимо от плавности перехода. */
-        // Кадр удвоен: 500 мс перехода + 100 мс статики = 600 мс. Переход идёт 30 кадров
-        // экрана (30 × 16,67 ≈ 500 мс), статика — 6 кадров (100 мс).
-        private static final float FRAME_MS = 600f;
+        // Длительность кадра анимации — 256 мс (ваш расчёт). Переход занимает 213 мс
+        // (13 кадров экрана), остаток 43 мс кадр стоит неизменным.
+        private static final float FRAME_MS = 256f;
         /** Доля времени кадра, отведённая на переход. Остальное — статика. */
-        private static final float MOVE_PART = 500f / 600f;
+        private static final float MOVE_PART = 213f / 256f;
         private static final float CYCLE_SECONDS = FRAMES * FRAME_MS / 1000f;
 
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
