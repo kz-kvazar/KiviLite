@@ -762,7 +762,7 @@ public class MainActivity extends Activity {
             // на 84-100% высоты, и нижняя треть экрана оставалась ровной чёрной.
             curtain(canvas, b, 0.09f, 0.32f, 1.40f, 0x3BE8A8, 0x52, phase, 0);   // зелёный
             curtain(canvas, b, 0.32f, 0.48f, 1.45f, 0x2FD8D8, 0x44, phase, 1);   // бирюзовый до самого низа
-            curtain(canvas, b, 0.44f, 0.34f, 1.38f, 0xFFE066, 0x4A, phase, 5);   // жёлтый - 557,7 нм, главный цвет сияния
+            curtain(canvas, b, 0.44f, 0.34f, 1.38f, 0xFFB733, 0x4A, phase, 5);   // жёлтый - 557,7 нм, главный цвет сияния
             curtain(canvas, b, 0.56f, 0.30f, 1.33f, 0x8A6CF0, 0x3E, phase, 2);   // фиолетовый
             curtain(canvas, b, 0.79f, 0.36f, 1.43f, 0x3BE8A8, 0x30, phase, 3);   // ещё зелёный
             curtain(canvas, b, 0.98f, 0.26f, 1.29f, 0x5AD8FF, 0x28, phase, 4);   // голубой у правого края
@@ -922,7 +922,7 @@ public class MainActivity extends Activity {
                 }
                 if (storm) {
                     p.setStyle(Paint.Style.FILL);
-                    p.setColor(0xFFFFE066);
+                    p.setColor(0xFFFFB733);
                     Path b = new Path();
                     b.moveTo(w * 0.52f, cy + w * 0.20f);
                     b.lineTo(w * 0.41f, cy + w * 0.46f);
