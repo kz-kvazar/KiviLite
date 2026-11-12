@@ -651,6 +651,8 @@ public class MainActivity extends Activity {
         private static final float FRAME_MS = 5000f;
         /** Доля времени кадра на переход: 1 — переход идёт весь кадр, статики нет. */
         private static final float MOVE_PART = 1f;
+        /** Разница между соседними кадрами набора — минимальная, 1% периода волны. */
+        private static final float PHASE_STEP = 0.01f;
         private static final float CYCLE_SECONDS = FRAMES * FRAME_MS / 1000f;
 
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
@@ -734,7 +736,7 @@ public class MainActivity extends Activity {
                 // Сдвиг минимальный: следующий набор кадров почти не отличается от прежнего,
                 // поэтому даже граница между оборотами незаметна. Дробь иррациональна — повторов нет.
                 // Разница между кадрами — минимальная: 0,01 периода волны.
-                phaseShift += 0.01f;
+                phaseShift += PHASE_STEP * FRAMES;   // сдвиг на оборот, чтобы стык не повторялся
                 if (phaseShift > 100f) phaseShift -= 100f;
                 buildFrames(cacheW, cacheH);
             }
@@ -775,7 +777,9 @@ public class MainActivity extends Activity {
                 public void run() {
                     for (int i = 1; i < FRAMES; i++) {
                         try {
-                            frames[i] = makeFrame(w, h, shift + i / (float) FRAMES);
+                            // Разницу между кадрами задаёт PHASE_STEP, а не i/FRAMES. Раньше здесь
+                            // стояло i/FRAMES (12,5% периода волны на кадр) — отсюда резкая смена.
+                            frames[i] = makeFrame(w, h, shift + i * PHASE_STEP);
                             readyCount = i + 1;
                         } catch (Throwable e) {
                             return;
