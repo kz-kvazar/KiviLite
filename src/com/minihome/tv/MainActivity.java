@@ -645,7 +645,7 @@ public class MainActivity extends Activity {
         private static final int FRAMES = 20;
         /** Во сколько раз уменьшаем кадр. 6 вместо 8: крупнее кадр — меньше ступенек
          *  при растяжении, а полосы в градиентах от этого только слабее. */
-        private static final int SCALE = 6;
+        private static final int SCALE = 8;
 
         // DITHER_FLAG сглаживает переходы между уровнями цвета — без него на плавных
         // градиентах видны полосы (в 8-битном цвете всего 256 уровней на канал).
