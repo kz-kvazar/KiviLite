@@ -50,7 +50,8 @@ quick-access tiles and the app grid:
 
 **Home screen**
 - Header: screen title, network indicator, weather, currency rates, clock and date.
-- Background drawn in code (smooth "water" gradients) and cached at ¼ resolution —
+- Background drawn in code: live aurora — 20 pre-rendered frames, 15 updates per second,
+  cross-fade between frames, cached at 1/8 resolution, colour smoothing —
   the screen blits a ready bitmap instead of recomputing gradients every frame.
 - Six shortcut tiles: **TV, HDMI, Settings, Android, Picture, Files**
   (package/activity of each lives in the `TILES` array).
