@@ -832,20 +832,23 @@ public class MainActivity extends Activity {
             float pulse   = (float) Math.sin(2 * Math.PI * (ph * 1 + 0.62f));   // разгорание и угасание
             float wave    = (float) Math.sin(2 * Math.PI * (ph * 2 + 0.15f));   // бегущая волна
 
-            cxF += 0.006f * ripple;                                  // в стороны — почти незаметно
-            hwF *= (1f + 0.16f * breathe);                           // ширина дышит заметнее
-            botF += 0.140f * pulse;                                  // лучи ходят по высоте
+            cxF += 0.022f * ripple;                                  // лёгкое смещение в стороны
+            hwF *= (1f + 0.30f * breathe);                           // ширина дышит заметно
+            botF += 0.200f * pulse;                                  // лучи ходят по высоте
             int a = (int) (alpha * (0.28f + 0.72f * (pulse * 0.5f + 0.5f)));
             a = (int) (a * (0.70f + 0.30f * (wave * 0.5f + 0.5f)));  // и вдоль полосы бежит волна
             if (a < 4) a = 4;
             if (a > 255) a = 255;
 
             float cx = b.left + w * cxF, hw = w * hwF, bot = b.top + h * botF;
+            float swayIn = breathe;
             Path p = new Path();
+            // Изгиб задаём опорными точками в верхней половине экрана: там движение видно.
+            float lean = hw * (0.22f + 0.30f * swayIn);   // наклон полосы «дыханием»
             p.moveTo(cx - hw, b.top - dp(4));
-            p.cubicTo(cx - hw * 1.18f, h * 0.22f, cx - hw * 0.68f, h * 0.48f, cx - hw * 0.92f, bot);
+            p.cubicTo(cx - hw * 1.06f - lean, h * 0.20f, cx - hw * 0.70f + lean * 0.4f, h * 0.52f, cx - hw * 0.92f, bot);
             p.lineTo(cx + hw * 0.92f, bot);
-            p.cubicTo(cx + hw * 0.68f, h * 0.48f, cx + hw * 1.18f, h * 0.22f, cx + hw, b.top - dp(4));
+            p.cubicTo(cx + hw * 0.70f - lean * 0.4f, h * 0.52f, cx + hw * 1.06f + lean, h * 0.20f, cx + hw, b.top - dp(4));
             p.close();
 
             // Мягкие края по бокам
