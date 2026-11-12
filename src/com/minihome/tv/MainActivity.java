@@ -1337,8 +1337,10 @@ public class MainActivity extends Activity {
         ensureFocus();
         handler.removeCallbacks(ticker);
         handler.postDelayed(ticker, 60000);
-        handler.removeCallbacks(bgTick);
-        handler.postDelayed(bgTick, 250);   // аврора живёт только пока экран наш
+        if (bgView != null) {
+            bgView.removeCallbacks(bgTick);
+            bgView.postOnAnimation(bgTick);   // аврора живёт только пока экран наш
+        }
     }
 
     @Override
