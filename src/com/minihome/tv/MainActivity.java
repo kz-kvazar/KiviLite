@@ -641,14 +641,14 @@ public class MainActivity extends Activity {
         // Длительность цикла = FRAMES × STEPS кадров экрана. При 60×12 цикл растягивался до
         // 12 секунд, и рисунок за один шаг менялся всё равно заметно. 30 кадров при 12 шагах
         // дают цикл 6 с и шаг всего 8% — движение читается как сплошное.
-        private static final int FRAMES = 30;
+        private static final int FRAMES = 24;
         /** Во сколько раз уменьшаем кадр: узор из плавных градиентов, мельчить не страшно. */
         private static final int SCALE = 8;
         /** Сколько шагов проявляется следующий кадр: больше — мягче переход. */
         // Сколько шагов проявляется следующий кадр. Шаг идёт раз в кадр экрана (16,7 мс),
         // поэтому 12 шагов — мягкое проявление за 0,2 с. При 4 шагах (по 25% за раз) смена
         // кадра читается глазом как рывок, даже если самих кадров много.
-        private static final int STEPS = 50;
+        private static final int STEPS = 90;
 
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         private android.graphics.Bitmap[] frames;
@@ -845,10 +845,17 @@ public class MainActivity extends Activity {
             Path p = new Path();
             // Изгиб задаём опорными точками в верхней половине экрана: там движение видно.
             float lean = hw * (0.22f + 0.30f * swayIn);   // наклон полосы «дыханием»
-            p.moveTo(cx - hw, b.top - dp(4));
-            p.cubicTo(cx - hw * 1.06f - lean, h * 0.20f, cx - hw * 0.70f + lean * 0.4f, h * 0.52f, cx - hw * 0.92f, bot);
+            // Верхний конец полосы тоже гуляет: раньше он жёстко стоял на кромке экрана,
+            // и верх выглядел статичным — менялась только плотность.
+            float topY = b.top - dp(4) + h * (0.03f * pulse + 0.05f * breathe);
+            float topX = hw * 0.30f * breathe;
+            p.moveTo(cx - hw + topX, topY);
+            p.cubicTo(cx - hw * 1.06f - lean, h * 0.22f + h * 0.05f * pulse,
+                      cx - hw * 0.70f + lean * 0.4f, h * 0.54f, cx - hw * 0.92f, bot);
             p.lineTo(cx + hw * 0.92f, bot);
-            p.cubicTo(cx + hw * 0.70f - lean * 0.4f, h * 0.52f, cx + hw * 1.06f + lean, h * 0.20f, cx + hw, b.top - dp(4));
+            p.cubicTo(cx + hw * 0.70f - lean * 0.4f, h * 0.54f,
+                      cx + hw * 1.06f + lean, h * 0.22f + h * 0.05f * pulse,
+                      cx + hw - topX, topY);
             p.close();
 
             // Мягкие края по бокам
