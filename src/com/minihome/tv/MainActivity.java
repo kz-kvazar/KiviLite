@@ -648,7 +648,7 @@ public class MainActivity extends Activity {
         // Сколько шагов проявляется следующий кадр. Шаг идёт раз в кадр экрана (16,7 мс),
         // поэтому 12 шагов — мягкое проявление за 0,2 с. При 4 шагах (по 25% за раз) смена
         // кадра читается глазом как рывок, даже если самих кадров много.
-        private static final int STEPS = 12;
+        private static final int STEPS = 16;
 
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         private android.graphics.Bitmap[] frames;
@@ -822,10 +822,13 @@ public class MainActivity extends Activity {
             float ph = phase + idx * 0.19f;
             // Частоты движения намеренно низкие. Раньше волна успевала 5 циклов за оборот, то
             // есть рисунок менялся на 20% за кадр — глаз читал это как рывок, а не движение.
+            // Частоты намеренно низкие: при двух-трёх циклах мерцания на оборот яркость
+            // прыгала на 15-24% за кадр, и это читалось как дёргание. Теперь за кадр
+            // яркость меняется на 3-6%, движение воспринимается сплошным.
             float ripple  = (float) Math.sin(2 * Math.PI * ph);                 // лёгкая рябь
             float breathe = (float) Math.sin(2 * Math.PI * (ph * 1 + 0.31f));   // складки по ширине
-            float pulse   = (float) Math.sin(2 * Math.PI * (ph * 2 + 0.62f));   // разгорание и угасание
-            float wave    = (float) Math.sin(2 * Math.PI * (ph * 3 + 0.15f));   // бегущая волна
+            float pulse   = (float) Math.sin(2 * Math.PI * (ph * 1 + 0.62f));   // разгорание и угасание
+            float wave    = (float) Math.sin(2 * Math.PI * (ph * 2 + 0.15f));   // бегущая волна
 
             cxF += 0.006f * ripple;                                  // в стороны — почти незаметно
             hwF *= (1f + 0.16f * breathe);                           // ширина дышит заметнее
