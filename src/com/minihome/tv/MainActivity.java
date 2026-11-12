@@ -645,10 +645,8 @@ public class MainActivity extends Activity {
         /** Во сколько раз уменьшаем кадр: узор из плавных градиентов, мельчить не страшно. */
         private static final int SCALE = 8;
         /** Сколько шагов проявляется следующий кадр: больше — мягче переход. */
-        // Сколько шагов проявляется следующий кадр. Шаг идёт раз в кадр экрана (16,7 мс),
-        // поэтому 12 шагов — мягкое проявление за 0,2 с. При 4 шагах (по 25% за раз) смена
-        // кадра читается глазом как рывок, даже если самих кадров много.
-        private static final int STEPS = 90;
+        /** За сколько секунд фон проходит полный круг — независимо от плавности перехода. */
+        private static final float CYCLE_SECONDS = 18f;
 
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         private android.graphics.Bitmap[] frames;
@@ -698,7 +696,10 @@ public class MainActivity extends Activity {
          */
         void nextStep() {
             if (frames == null || readyCount < 2) return;
-            pos += 1f / STEPS;                 // 12 шагов на кадр — смена кадров без ступенек
+            // Прибавку считаем по времени шага развёртки, а не «порциями на кадр». Теперь
+            // плавность перехода и скорость движения независимы: уменьшая шаг, мы больше
+            // не растягиваем цикл. Предел плавности — разрядность прозрачности, 1/255.
+            pos += FRAMES / (CYCLE_SECONDS * 60f);
             if (pos >= FRAMES) pos -= FRAMES;  // замкнутый цикл
             int idx = (int) pos;
             if (idx >= readyCount) {           // нужный кадр ещё рисуется — стоим на последнем готовом
