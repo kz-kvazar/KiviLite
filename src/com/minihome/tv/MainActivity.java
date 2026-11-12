@@ -646,10 +646,12 @@ public class MainActivity extends Activity {
         private static final int SCALE = 8;
         /** Сколько шагов проявляется следующий кадр: больше — мягче переход. */
         /** За сколько секунд фон проходит полный круг — независимо от плавности перехода. */
-        // Плавность держим на пределе: шаг = 1 деление прозрачности из 255 (0,39%), то есть
-        // 4,25 с на проявление одного кадра. Девять кадров (шесть плюс три) дают цикл 38 с.
-        // Скорость в 3 кадра в секунду несовместима с этим: она требует шага 5%.
-        private static final float CYCLE_SECONDS = 38f;
+        // Кадр: 250 мс перехода + 50 мс статики = 300 мс. Переход идёт 15 кадров экрана
+        // (15 × 16,67 мс = 250 мс), статика — 3 кадра (50 мс).
+        private static final float FRAME_MS = 300f;
+        /** Доля времени кадра, отведённая на переход. Остальное — статика. */
+        private static final float MOVE_PART = 250f / 300f;
+        private static final float CYCLE_SECONDS = FRAMES * FRAME_MS / 1000f;
 
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         private android.graphics.Bitmap[] frames;
@@ -705,6 +707,8 @@ public class MainActivity extends Activity {
                         nxt.getWidth(), Math.max(1, y1 * nxt.getHeight() / H));
                 android.graphics.Rect sc = new android.graphics.Rect(0, y0 * cur.getHeight() / H,
                         cur.getWidth(), Math.max(1, y1 * cur.getHeight() / H));
+                // Новый кадр набирает плотность, старый одновременно её теряет — как вы описали.
+                paint.setAlpha((int) (255 * local));
                 canvas.drawBitmap(nxt, sn, dst, paint);
                 paint.setAlpha((int) (255 * (1f - local)));
                 canvas.drawBitmap(cur, sc, dst, paint);
@@ -721,7 +725,7 @@ public class MainActivity extends Activity {
             // Прибавку считаем по времени шага развёртки, а не «порциями на кадр». Теперь
             // плавность перехода и скорость движения независимы: уменьшая шаг, мы больше
             // не растягиваем цикл. Предел плавности — разрядность прозрачности, 1/255.
-            pos += FRAMES / (CYCLE_SECONDS * 60f);
+            pos += FRAMES / (CYCLE_SECONDS * 60f);   // ровно 18 кадров экрана на кадр анимации
             if (pos >= FRAMES) {
                 // Оборот закончился. Сдвигаем фазу и пересобираем набор кадров: рисунок
                 // следующего оборота будет другим, однообразия не возникнет. Восемь кадров
@@ -729,7 +733,7 @@ public class MainActivity extends Activity {
                 pos -= FRAMES;
                 // Сдвиг минимальный: следующий набор кадров почти не отличается от прежнего,
                 // поэтому даже граница между оборотами незаметна. Дробь иррациональна — повторов нет.
-                phaseShift += 0.08f;
+                phaseShift += 0.04f;   // различие между наборами минимально
                 if (phaseShift > 100f) phaseShift -= 100f;
                 buildFrames(cacheW, cacheH);
             }
@@ -739,7 +743,10 @@ public class MainActivity extends Activity {
                 idx = readyCount - 1;
             }
             frameIdx = idx;
-            blend = pos - idx;                 // дробная часть — плотность перехода
+            // Внутри кадра: первые 250 мс идёт переход, последние 50 мс кадр стоит неизменным.
+            float raw = pos - idx;                        // 0..1 на весь кадр (18 шагов экрана)
+            float moved = raw / MOVE_PART;                // растягиваем переход на 15 шагов
+            blend = moved > 1f ? 1f : moved;              // далее 3 шага статики
             invalidateSelf();
         }
 
