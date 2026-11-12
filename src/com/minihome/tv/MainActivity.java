@@ -638,7 +638,7 @@ public class MainActivity extends Activity {
     /** Фон лаунчера: тёмное небо, занавеси северного сияния и мягкое затухание к низу. */
     private class BgDrawable extends Drawable {
         /** Сколько кадров в цикле движения: больше — плавнее, но и памяти больше. */
-        private static final int FRAMES = 36;
+        private static final int FRAMES = 60;
         /** Во сколько раз уменьшаем кадр: узор из плавных градиентов, мельчить не страшно. */
         private static final int SCALE = 8;
         /** Сколько шагов проявляется следующий кадр: больше — мягче переход. */
@@ -805,10 +805,12 @@ public class MainActivity extends Activity {
             // опускаются и поднимаются по высоте, а вдоль занавеси бегут волны свечения —
             // это называют «пламенеющим сиянием». Боковое смещение — лишь лёгкая рябь.
             float ph = phase + idx * 0.19f;
+            // Частоты движения намеренно низкие. Раньше волна успевала 5 циклов за оборот, то
+            // есть рисунок менялся на 20% за кадр — глаз читал это как рывок, а не движение.
             float ripple  = (float) Math.sin(2 * Math.PI * ph);                 // лёгкая рябь
-            float breathe = (float) Math.sin(2 * Math.PI * (ph * 2 + 0.31f));   // складки по ширине
-            float pulse   = (float) Math.sin(2 * Math.PI * (ph * 3 + 0.62f));   // разгорание и угасание
-            float wave    = (float) Math.sin(2 * Math.PI * (ph * 5 + 0.15f));   // бегущая волна
+            float breathe = (float) Math.sin(2 * Math.PI * (ph * 1 + 0.31f));   // складки по ширине
+            float pulse   = (float) Math.sin(2 * Math.PI * (ph * 2 + 0.62f));   // разгорание и угасание
+            float wave    = (float) Math.sin(2 * Math.PI * (ph * 3 + 0.15f));   // бегущая волна
 
             cxF += 0.006f * ripple;                                  // в стороны — почти незаметно
             hwF *= (1f + 0.16f * breathe);                           // ширина дышит заметнее
