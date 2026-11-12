@@ -646,11 +646,12 @@ public class MainActivity extends Activity {
         private static final int SCALE = 8;
         /** Сколько шагов проявляется следующий кадр: больше — мягче переход. */
         /** За сколько секунд фон проходит полный круг — независимо от плавности перехода. */
-        // Длительность кадра анимации — 256 мс (ваш расчёт). Переход занимает 213 мс
-        // (13 кадров экрана), остаток 43 мс кадр стоит неизменным.
+        // Кадр анимации — 256 мс. Переход занимает ВЕСЬ кадр (статика убрана), иначе
+        // часть ступеней прозрачности пропускается. 256 мс при 60 Гц = 16 ступеней,
+        // каждая отрисовывается. Скорость: 1000 / 256 = 3,9 кадра анимации в секунду.
         private static final float FRAME_MS = 256f;
-        /** Доля времени кадра, отведённая на переход. Остальное — статика. */
-        private static final float MOVE_PART = 213f / 256f;
+        /** Доля времени кадра на переход: 1 — переход идёт весь кадр, статики нет. */
+        private static final float MOVE_PART = 1f;
         private static final float CYCLE_SECONDS = FRAMES * FRAME_MS / 1000f;
 
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
