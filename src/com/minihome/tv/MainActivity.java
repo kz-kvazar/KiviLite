@@ -756,24 +756,27 @@ public class MainActivity extends Activity {
             curtain(canvas, b, 0.79f, 0.36f, 0.98f, 0x66EC9E, 0xFFE066, 0x52, phase, 3);  // изумрудный
             curtain(canvas, b, 0.98f, 0.26f, 0.84f, 0x6690F5, 0x9E78F0, 0x46, phase, 4);  // синий азотный
 
-            // Мягкое свечение у верхней кромки — медленно дышит
-            int glowA = (int) (0x22 * (0.60f + 0.40f * (float) Math.sin(phase * 2 * Math.PI)));
-            if (glowA < 5) glowA = 5;
-            paint.setShader(new RadialGradient(w * 0.5f, b.top, w * 0.75f,
+            // Общее свечение неба — медленно дышит. Центр держим на трети высоты, а не на
+            // верхней кромке: свет, бивший из кромки, засвечивал верхний угол постоянно,
+            // и углы по краям экрана оставались светлее всего остального.
+            int glowA = (int) (0x14 * (0.55f + 0.45f * (float) Math.sin(phase * 2 * Math.PI)));
+            if (glowA < 3) glowA = 3;
+            paint.setShader(new RadialGradient(w * 0.5f, h * 0.44f, w * 1.05f,
                     new int[]{(glowA << 24) | 0x5FE8C0, 0x00000000}, null, Shader.TileMode.CLAMP));
-            canvas.drawRect(b.left, b.top, b.right, h * 0.5f, paint);
-            paint.setShader(null);
-
-            // Плавное затухание до самого низа: без чёрного, в тёмно-синий
-            paint.setShader(new LinearGradient(0, b.top, 0, b.bottom,
-                    new int[]{0x00000000, 0x100A1024, 0x260C1430, 0x440C1430, 0x620E1630, 0x7A0E1630},
-                    new float[]{0f, 0.25f, 0.48f, 0.68f, 0.88f, 1f}, Shader.TileMode.CLAMP));
             canvas.drawRect(b, paint);
             paint.setShader(null);
 
-            // Виньетка по краям
-            paint.setShader(new RadialGradient(w * 0.5f, h * 0.5f, Math.max(w, h) * 0.76f,
-                    new int[]{0x00000000, 0x00000000, 0x380C1430}, new float[]{0f, 0.62f, 1f}, Shader.TileMode.CLAMP));
+            // Затухание к низу совсем лёгкое: плотная заливка внизу давала ровную тёмную
+            // полосу, из-за которой казалось, что сияние не доходит до нижней кромки.
+            paint.setShader(new LinearGradient(0, b.top, 0, b.bottom,
+                    new int[]{0x00000000, 0x070A1024, 0x110C1430, 0x1D0C1430, 0x2A0E1630, 0x360E1630},
+                    new float[]{0f, 0.32f, 0.55f, 0.74f, 0.90f, 1f}, Shader.TileMode.CLAMP));
+            canvas.drawRect(b, paint);
+            paint.setShader(null);
+
+            // Виньетка по краям совсем мягкая: она тоже добавляла углам лишнюю темноту
+            paint.setShader(new RadialGradient(w * 0.5f, h * 0.5f, Math.max(w, h) * 0.86f,
+                    new int[]{0x00000000, 0x00000000, 0x1E0C1430}, new float[]{0f, 0.72f, 1f}, Shader.TileMode.CLAMP));
             canvas.drawRect(b, paint);
             paint.setShader(null);
         }
