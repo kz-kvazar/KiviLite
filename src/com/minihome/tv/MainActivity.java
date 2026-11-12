@@ -114,7 +114,15 @@ public class MainActivity extends Activity {
     private TextView clockView;
     private TextView dateView;
     private NetIcon netView;
+    private BgDrawable bg;
     private final Handler handler = new Handler();
+    /** Живая аврора: пока лаунчер на экране, кадры фона сменяются по таймеру. */
+    private final Runnable bgTick = new Runnable() {
+        public void run() {
+            if (bg != null) bg.nextFrame();
+            handler.postDelayed(this, 250);   // 20 кадров по 0,25 с — цикл 5 секунд
+        }
+    };
     private Set<String> hidden = new HashSet<String>();
     /** Защита от двойного показа меню, когда долгое нажатие приходит сразу от сетки и от плитки. */
     private long lastMenuAt = 0L;
@@ -629,42 +637,88 @@ public class MainActivity extends Activity {
 
     /** Фон лаунчера: тёмное небо, занавеси северного сияния и мягкое затухание к низу. */
     private class BgDrawable extends Drawable {
-        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private android.graphics.Bitmap cache;
-        private int cacheW, cacheH;
+        /** Сколько кадров в цикле движения: больше — плавнее, но и памяти больше. */
+        private static final int FRAMES = 20;
+        /** Во сколько раз уменьшаем кадр: узор из плавных градиентов, мельчить не страшно. */
+        private static final int SCALE = 8;
+
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        private android.graphics.Bitmap[] frames;
+        private int cacheW, cacheH, frameIdx;
+        /** Сколько кадров уже готово (пишется из фонового потока, читается на экране). */
+        private volatile int readyCount;
 
         @Override
         public void draw(Canvas canvas) {
             Rect b = getBounds();
-            if (cache == null || cacheW != b.width() || cacheH != b.height()) {
-                buildCache(b.width(), b.height());
+            if (frames == null || cacheW != b.width() || cacheH != b.height()) {
+                buildFrames(b.width(), b.height());
             }
-            if (cache != null) {
-                canvas.drawBitmap(cache, null, b, paint);   // фон уже нарисован — просто копируем
+            android.graphics.Bitmap shown = frames == null ? null : frames[frameIdx];
+            if (shown != null) {
+                canvas.drawBitmap(shown, null, b, paint);   // кадр готов — просто копируем
                 return;
             }
-            paintBackground(canvas, b);
+            paintBackground(canvas, b, 0f);
         }
 
-        /** Весь узор рисуем один раз в половинном разрешении: дешевле по процессору и по памяти. */
-        private void buildCache(int w, int h) {
+        /**
+         * Следующий кадр движения. Вызывается по таймеру, пока лаунчер на экране.
+         * Стоит это ровно одну копию картинки — поэтому аврора не грузит процессор.
+         */
+        void nextFrame() {
+            if (frames == null) return;
+            int next = (frameIdx + 1) % FRAMES;
+            if (next >= readyCount) return;      // кадр ещё рисуется — стоим на текущем
+            frameIdx = next;
+            invalidateSelf();
+        }
+
+        /**
+         * Кадры движения рисуем один раз в уменьшенном разрешении и потом только копируем.
+         * Так анимация почти не стоит процессора: смена кадра — это одна копия картинки.
+         * Первый кадр делаем сразу (экран не ждёт), остальные — в фоновом потоке с низким
+         * приоритетом, чтобы не мешать отрисовке интерфейса и запуску приложений.
+         */
+        private void buildFrames(final int w, final int h) {
             cacheW = w;
             cacheH = h;
+            frameIdx = 0;
+            readyCount = 0;
             try {
-                // Четверть разрешения: фон состоит из плавных градиентов, при растяжении
-                // разницы не видно, а памяти уходит вчетверо меньше.
-                cache = android.graphics.Bitmap.createBitmap(
-                        Math.max(1, w / 4), Math.max(1, h / 4), android.graphics.Bitmap.Config.ARGB_8888);
+                frames = new android.graphics.Bitmap[FRAMES];
+                frames[0] = makeFrame(w, h, 0f);
+                readyCount = 1;
             } catch (Throwable t) {
-                cache = null;
+                frames = null;
                 return;
             }
-            Canvas c = new Canvas(cache);
-            c.scale(0.25f, 0.25f);
-            paintBackground(c, new Rect(0, 0, w, h));
+            Thread t = new Thread(new Runnable() {
+                public void run() {
+                    for (int i = 1; i < FRAMES; i++) {
+                        try {
+                            frames[i] = makeFrame(w, h, i / (float) FRAMES);
+                            readyCount = i + 1;
+                        } catch (Throwable e) {
+                            return;
+                        }
+                    }
+                }
+            }, "bg-frames");
+            t.setPriority(Thread.MIN_PRIORITY);
+            t.start();
         }
 
-        private void paintBackground(Canvas canvas, Rect b) {
+        private android.graphics.Bitmap makeFrame(int w, int h, float phase) {
+            android.graphics.Bitmap bm = android.graphics.Bitmap.createBitmap(
+                    Math.max(1, w / SCALE), Math.max(1, h / SCALE), android.graphics.Bitmap.Config.ARGB_8888);
+            Canvas c = new Canvas(bm);
+            c.scale(1f / SCALE, 1f / SCALE);
+            paintBackground(c, new Rect(0, 0, w, h), phase);
+            return bm;
+        }
+
+        private void paintBackground(Canvas canvas, Rect b, float phase) {
             float w = b.width(), h = b.height();
 
             // Ночное небо
@@ -674,15 +728,17 @@ public class MainActivity extends Activity {
             paint.setShader(null);
 
             // Занавеси северного сияния — без точек и звёзд
-            curtain(canvas, b, 0.09f, 0.32f, 0.95f, 0x3BE8A8, 0x52);   // зелёный
-            curtain(canvas, b, 0.32f, 0.48f, 1.00f, 0x2FD8D8, 0x44);   // бирюзовый до самого низа
-            curtain(canvas, b, 0.56f, 0.30f, 0.88f, 0x8A6CF0, 0x3E);   // фиолетовый
-            curtain(canvas, b, 0.79f, 0.36f, 0.98f, 0x3BE8A8, 0x30);   // ещё зелёный
-            curtain(canvas, b, 0.98f, 0.26f, 0.84f, 0x5AD8FF, 0x28);   // голубой у правого края
+            curtain(canvas, b, 0.09f, 0.32f, 0.95f, 0x3BE8A8, 0x52, phase, 0);   // зелёный
+            curtain(canvas, b, 0.32f, 0.48f, 1.00f, 0x2FD8D8, 0x44, phase, 1);   // бирюзовый до самого низа
+            curtain(canvas, b, 0.56f, 0.30f, 0.88f, 0x8A6CF0, 0x3E, phase, 2);   // фиолетовый
+            curtain(canvas, b, 0.79f, 0.36f, 0.98f, 0x3BE8A8, 0x30, phase, 3);   // ещё зелёный
+            curtain(canvas, b, 0.98f, 0.26f, 0.84f, 0x5AD8FF, 0x28, phase, 4);   // голубой у правого края
 
-            // Мягкое свечение у верхней кромки
+            // Мягкое свечение у верхней кромки — медленно дышит
+            int glowA = (int) (0x22 * (0.60f + 0.40f * (float) Math.sin(phase * 2 * Math.PI)));
+            if (glowA < 5) glowA = 5;
             paint.setShader(new RadialGradient(w * 0.5f, b.top, w * 0.75f,
-                    new int[]{0x225FE8C0, 0x00000000}, null, Shader.TileMode.CLAMP));
+                    new int[]{(glowA << 24) | 0x5FE8C0, 0x00000000}, null, Shader.TileMode.CLAMP));
             canvas.drawRect(b.left, b.top, b.right, h * 0.5f, paint);
             paint.setShader(null);
 
@@ -704,10 +760,26 @@ public class MainActivity extends Activity {
          * Занавесь сияния: волнистая вертикальная полоса.
          * Края мягкие по бокам, а книзу полоса растворяется — резкой границы нет.
          */
-        private void curtain(Canvas canvas, Rect b, float cxF, float hwF, float botF, int color, int alpha) {
+        private void curtain(Canvas canvas, Rect b, float cxF, float hwF, float botF,
+                             int color, int alpha, float phase, int idx) {
             float w = b.width(), h = b.height();
+
+            // Движение задаём фазой. Множители целые — значит цикл замкнут и переход
+            // последнего кадра в первый незаметен: швов в анимации нет.
+            float ph = phase + idx * 0.19f;
+            float sway = (float) Math.sin(2 * Math.PI * ph);                    // покачивание в стороны
+            float breathe = (float) Math.sin(2 * Math.PI * (ph * 2 + 0.31f));   // дыхание по ширине
+            float pulse = (float) Math.sin(2 * Math.PI * (ph * 3 + 0.62f));     // мерцание яркости
+
+            cxF += 0.030f * sway;
+            hwF *= (1f + 0.13f * breathe);
+            botF += 0.045f * pulse;
+            int a = (int) (alpha * (0.78f + 0.22f * (pulse * 0.5f + 0.5f)));
+            if (a < 4) a = 4;
+            if (a > 255) a = 255;
+
             float cx = b.left + w * cxF, hw = w * hwF, bot = b.top + h * botF;
-            int c = (alpha << 24) | (color & 0x00FFFFFF);
+            int c = (a << 24) | (color & 0x00FFFFFF);
             Path p = new Path();
             p.moveTo(cx - hw, b.top - dp(4));
             p.cubicTo(cx - hw * 1.18f, h * 0.22f, cx - hw * 0.68f, h * 0.48f, cx - hw * 0.92f, bot);
@@ -915,7 +987,7 @@ public class MainActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         rootView = root;
         // Фон: градиент + очень бледная векторная графика (дуги, точки) — читаемость не страдает.
-        root.setBackgroundDrawable(new BgDrawable());
+        root.setBackgroundDrawable(bg = new BgDrawable());
 
         LinearLayout header = new LinearLayout(this);
         header.setOrientation(LinearLayout.HORIZONTAL);
@@ -1200,12 +1272,15 @@ public class MainActivity extends Activity {
         ensureFocus();
         handler.removeCallbacks(ticker);
         handler.postDelayed(ticker, 60000);
+        handler.removeCallbacks(bgTick);
+        handler.postDelayed(bgTick, 250);   // аврора живёт только пока экран наш
     }
 
     @Override
     protected void onPause() {
         super.onPause();
         handler.removeCallbacks(ticker);
+        handler.removeCallbacks(bgTick);    // ушли с экрана — движение останавливаем
         cancelPendingLong();
     }
 
