@@ -757,12 +757,14 @@ public class MainActivity extends Activity {
             canvas.drawRect(b, paint);
             paint.setShader(null);
 
-            // Занавеси северного сияния — без точек и звёзд
-            curtain(canvas, b, 0.09f, 0.32f, 0.95f, 0x3BE8A8, 0x52, phase, 0);   // зелёный
-            curtain(canvas, b, 0.32f, 0.48f, 1.00f, 0x2FD8D8, 0x44, phase, 1);   // бирюзовый до самого низа
-            curtain(canvas, b, 0.56f, 0.30f, 0.88f, 0x8A6CF0, 0x3E, phase, 2);   // фиолетовый
-            curtain(canvas, b, 0.79f, 0.36f, 0.98f, 0x3BE8A8, 0x30, phase, 3);   // ещё зелёный
-            curtain(canvas, b, 0.98f, 0.26f, 0.84f, 0x5AD8FF, 0x28, phase, 4);   // голубой у правого края
+            // Занавеси северного сияния — без точек и звёзд.
+            // Полосы продлены за нижнюю кромку (botF больше единицы): раньше они заканчивались
+            // на 84-100% высоты, и нижняя треть экрана оставалась ровной чёрной.
+            curtain(canvas, b, 0.09f, 0.32f, 1.40f, 0x3BE8A8, 0x52, phase, 0);   // зелёный
+            curtain(canvas, b, 0.32f, 0.48f, 1.45f, 0x2FD8D8, 0x44, phase, 1);   // бирюзовый до самого низа
+            curtain(canvas, b, 0.56f, 0.30f, 1.33f, 0x8A6CF0, 0x3E, phase, 2);   // фиолетовый
+            curtain(canvas, b, 0.79f, 0.36f, 1.43f, 0x3BE8A8, 0x30, phase, 3);   // ещё зелёный
+            curtain(canvas, b, 0.98f, 0.26f, 1.29f, 0x5AD8FF, 0x28, phase, 4);   // голубой у правого края
 
             // Мягкое свечение у верхней кромки — медленно дышит
             int glowA = (int) (0x22 * (0.60f + 0.40f * (float) Math.sin(phase * 2 * Math.PI)));
