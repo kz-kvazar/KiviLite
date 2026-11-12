@@ -120,7 +120,7 @@ public class MainActivity extends Activity {
     private final Runnable bgTick = new Runnable() {
         public void run() {
             if (bg != null) bg.nextStep();
-            handler.postDelayed(this, 66);    // 15 шагов в секунду: плавно и недорого
+            handler.postDelayed(this, 45);    // цикл около 3,6 с: движение живее прежнего
         }
     };
     private Set<String> hidden = new HashSet<String>();
@@ -669,9 +669,9 @@ public class MainActivity extends Activity {
                 canvas.drawBitmap(cur, null, b, paint);   // перехода нет — просто копия кадра
                 return;
             }
-            // Плавно проявляем следующий кадр поверх текущего. Без этого глаз видит
-            // смену картинки раз в четверть секунды, то есть рывки, а не движение.
-            paint.setAlpha((int) (255 * (1f - blend)));
+            // Текущий кадр всегда непрозрачный — он основа. Гасить его нельзя: сквозь
+            // полупрозрачный кадр проступает чернота, и картинка мигает при каждой смене.
+            // А вот следующий кадр проявляем поверх него с нарастающей плотностью.
             canvas.drawBitmap(cur, null, b, paint);
             paint.setAlpha((int) (255 * blend));
             canvas.drawBitmap(nxt, null, b, paint);
@@ -750,11 +750,11 @@ public class MainActivity extends Activity {
             // Цвета взяты у настоящего сияния: основной зелёный 557,7 нм — самый частый,
             // выше идёт золотисто-жёлтая полоса (та самая «жёлтая» аврора), у верхушек лучей
             // красная кромка 630 нм, у нижних краёв фиолетовая 427,8 нм.
-            curtain(canvas, b, 0.09f, 0.32f, 0.95f, 0x6BE86B, 0xE8C84A, 0x52, phase, 0);  // зелёный с золотом
-            curtain(canvas, b, 0.32f, 0.48f, 1.00f, 0x9BE87A, 0xF0D860, 0x44, phase, 1);  // бледно-жёлто-зелёный
-            curtain(canvas, b, 0.56f, 0.30f, 0.88f, 0x8A5FD8, 0xE878B0, 0x3E, phase, 2);  // фиолетовый с розовым
-            curtain(canvas, b, 0.79f, 0.36f, 0.98f, 0x50D98A, 0xE8C84A, 0x30, phase, 3);  // изумрудный
-            curtain(canvas, b, 0.98f, 0.26f, 0.84f, 0x4A6EE0, 0x8A5FD8, 0x28, phase, 4);  // синий азотный
+            curtain(canvas, b, 0.09f, 0.32f, 0.95f, 0x7BF07B, 0xFFE066, 0x7E, phase, 0);  // зелёный с золотом
+            curtain(canvas, b, 0.32f, 0.48f, 1.00f, 0xAEF78C, 0xFFE97A, 0x6C, phase, 1);  // бледно-жёлто-зелёный
+            curtain(canvas, b, 0.56f, 0.30f, 0.88f, 0x9E78F0, 0xFF8CC8, 0x62, phase, 2);  // фиолетовый с розовым
+            curtain(canvas, b, 0.79f, 0.36f, 0.98f, 0x66EC9E, 0xFFE066, 0x52, phase, 3);  // изумрудный
+            curtain(canvas, b, 0.98f, 0.26f, 0.84f, 0x6690F5, 0x9E78F0, 0x46, phase, 4);  // синий азотный
 
             // Мягкое свечение у верхней кромки — медленно дышит
             int glowA = (int) (0x22 * (0.60f + 0.40f * (float) Math.sin(phase * 2 * Math.PI)));
@@ -796,15 +796,20 @@ public class MainActivity extends Activity {
 
             // Движение задаём фазой. Множители целые — значит цикл замкнут и переход
             // последнего кадра в первый незаметен: швов в анимации нет.
+            // Настоящее сияние почти не ходит в стороны. Лучи разгораются и гаснут на месте,
+            // опускаются и поднимаются по высоте, а вдоль занавеси бегут волны свечения —
+            // это называют «пламенеющим сиянием». Боковое смещение — лишь лёгкая рябь.
             float ph = phase + idx * 0.19f;
-            float sway = (float) Math.sin(2 * Math.PI * ph);                    // покачивание в стороны
-            float breathe = (float) Math.sin(2 * Math.PI * (ph * 2 + 0.31f));   // дыхание по ширине
-            float pulse = (float) Math.sin(2 * Math.PI * (ph * 3 + 0.62f));     // мерцание яркости
+            float ripple  = (float) Math.sin(2 * Math.PI * ph);                 // лёгкая рябь
+            float breathe = (float) Math.sin(2 * Math.PI * (ph * 2 + 0.31f));   // складки по ширине
+            float pulse   = (float) Math.sin(2 * Math.PI * (ph * 3 + 0.62f));   // разгорание и угасание
+            float wave    = (float) Math.sin(2 * Math.PI * (ph * 5 + 0.15f));   // бегущая волна
 
-            cxF += 0.030f * sway;
-            hwF *= (1f + 0.13f * breathe);
-            botF += 0.045f * pulse;
-            int a = (int) (alpha * (0.78f + 0.22f * (pulse * 0.5f + 0.5f)));
+            cxF += 0.006f * ripple;                                  // в стороны — почти незаметно
+            hwF *= (1f + 0.16f * breathe);                           // ширина дышит заметнее
+            botF += 0.105f * pulse;                                  // лучи ходят по высоте
+            int a = (int) (alpha * (0.52f + 0.48f * (pulse * 0.5f + 0.5f)));
+            a = (int) (a * (0.88f + 0.12f * (wave * 0.5f + 0.5f)));  // и вдоль полосы бежит волна
             if (a < 4) a = 4;
             if (a > 255) a = 255;
 
@@ -819,22 +824,30 @@ public class MainActivity extends Activity {
             // Мягкие края по бокам
             Shader side = new LinearGradient(cx - hw, 0, cx + hw, 0,
                     new int[]{0x00FFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x00FFFFFF},
-                    new float[]{0f, 0.32f, 0.68f, 1f}, Shader.TileMode.CLAMP);
+                    new float[]{0f, 0.18f, 0.82f, 1f}, Shader.TileMode.CLAMP);
             // Ход цвета по высоте полосы: красная кромка у верхушек, золотисто-жёлтая полоса,
             // основная зелёная масса и фиолетово-розовые нижние края.
             Shader body = new LinearGradient(0, b.top, 0, bot, new int[]{
                     0x00FFFFFF,
-                    tint(0xC0302B, a, 0.30f),     // красная кромка лучей
-                    tint(accent, a, 0.72f),       // золотисто-жёлтая полоса
-                    tint(color, a, 1.00f),        // основной цвет полосы
-                    tint(color, a, 0.78f),
-                    tint(0x8A5FD8, a, 0.45f),     // фиолетовые кромки
-                    tint(0xE878B0, a, 0.20f),     // розовая подложка
+                    tint(0xC0302B, a, 0.22f),     // красная кромка лучей
+                    tint(0xD8703A, a, 0.34f),
+                    tint(accent, a, 0.58f),       // золотисто-жёлтая полоса
+                    tint(accent, a, 0.78f),
+                    tint(color, a, 0.94f),        // основной цвет полосы
+                    tint(color, a, 1.00f),
+                    tint(color, a, 0.86f),
+                    tint(0x6FC9A0, a, 0.66f),
+                    tint(0x9E78F0, a, 0.44f),     // фиолетовые кромки
+                    tint(0xE878B0, a, 0.14f),     // розовая подложка
                     0x00FFFFFF},
-                    new float[]{0f, 0.07f, 0.17f, 0.36f, 0.62f, 0.85f, 0.95f, 1f}, Shader.TileMode.CLAMP);
+                    new float[]{0f, 0.05f, 0.11f, 0.20f, 0.29f, 0.42f, 0.55f, 0.68f, 0.79f, 0.90f, 0.97f, 1f},
+                    Shader.TileMode.CLAMP);
             paint.setShader(new android.graphics.ComposeShader(body, side, android.graphics.PorterDuff.Mode.DST_IN));
+            // Края лучей размываем: без этого полоса выглядит нарисованной, с резкой кромкой.
+            paint.setMaskFilter(new android.graphics.BlurMaskFilter(dp(7), android.graphics.BlurMaskFilter.Blur.NORMAL));
             canvas.drawPath(p, paint);
             paint.setShader(null);
+            paint.setMaskFilter(null);
         }
 
         @Override
