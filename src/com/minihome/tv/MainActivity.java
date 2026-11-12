@@ -647,8 +647,10 @@ public class MainActivity extends Activity {
         /** Сколько шагов проявляется следующий кадр: больше — мягче переход. */
         /** За сколько секунд фон проходит полный круг — независимо от плавности перехода. */
         // Шаг перехода и длительность цикла связаны так: шаг = FRAMES / (CYCLE_SECONDS × 60).
-        // Для шага 0,5% при 24 кадрах цикл выходит 24 / (0.005 × 60) = 80 секунд.
-        private static final float CYCLE_SECONDS = 80f;
+        // Запрошен шаг 0,3%. Точность прозрачности — целое 0..255, то есть минимальный
+        // различимый шаг равен 1/255 = 0,39%. Ставим его, это физический предел: мельче
+        // задать нельзя, значение просто округлится. Цикл: 24 / (0.0039 × 60) ≈ 102 с.
+        private static final float CYCLE_SECONDS = 102f;
 
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         private android.graphics.Bitmap[] frames;
