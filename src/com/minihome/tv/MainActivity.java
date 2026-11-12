@@ -790,6 +790,16 @@ public class MainActivity extends Activity {
          * Занавесь сияния: волнистая вертикальная полоса.
          * Края мягкие по бокам, а книзу полоса растворяется — резкой границы нет.
          */
+        /** Смешивание двух цветов: r,g,b и прозрачность — для густого градиента без ступенек. */
+        private int mixColor(int c1, int c2, float k) {
+            int a1 = (c1 >>> 24), a2 = (c2 >>> 24);
+            int r = (int) (((c1 >> 16) & 255) * (1 - k) + ((c2 >> 16) & 255) * k);
+            int g = (int) (((c1 >> 8) & 255) * (1 - k) + ((c2 >> 8) & 255) * k);
+            int bl = (int) ((c1 & 255) * (1 - k) + (c2 & 255) * k);
+            int al = (int) (a1 * (1 - k) + a2 * k);
+            return (al << 24) | (r << 16) | (g << 8) | bl;
+        }
+
         private void curtain(Canvas canvas, Rect b, float cxF, float hwF, float botF,
                              int color, int alpha, float phase, int idx) {
             float w = b.width(), h = b.height();
