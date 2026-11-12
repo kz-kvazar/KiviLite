@@ -769,11 +769,11 @@ public class MainActivity extends Activity {
             // красная кромка 630 нм, у нижних краёв фиолетовая 427,8 нм.
             // Полосы продлены за нижнюю кромку и разведены по ширине так, чтобы сияние
             // занимало весь экран: раньше внизу оставалась ровная тёмная полоса.
-            curtain(canvas, b, 0.04f, 0.42f, 1.34f, 0x8CF68C, 0xFFE777, 0x9C, phase, 0);  // зелёный с золотом
-            curtain(canvas, b, 0.28f, 0.54f, 1.24f, 0xC0FA9C, 0xFFEE8C, 0x8C, phase, 1);  // бледно-жёлто-зелёный
-            curtain(canvas, b, 0.52f, 0.44f, 1.38f, 0xB08CFA, 0xFFA0D6, 0x7E, phase, 2);  // фиолетовый с розовым
-            curtain(canvas, b, 0.76f, 0.46f, 1.28f, 0x84F6B4, 0xFFE777, 0x70, phase, 3);  // изумрудный
-            curtain(canvas, b, 1.00f, 0.40f, 1.20f, 0x84ACFF, 0xB08CFA, 0x62, phase, 4);  // синий азотный
+            curtain(canvas, b, 0.06f, 0.40f, 1.06f, 0x8CF68C, 0xFFE777, 0x9C, phase, 0);  // зелёный с золотом
+            curtain(canvas, b, 0.30f, 0.50f, 1.02f, 0xC0FA9C, 0xFFEE8C, 0x8C, phase, 1);  // бледно-жёлто-зелёный
+            curtain(canvas, b, 0.52f, 0.42f, 1.08f, 0xB08CFA, 0xFFA0D6, 0x7E, phase, 2);  // фиолетовый с розовым
+            curtain(canvas, b, 0.74f, 0.44f, 1.04f, 0x84F6B4, 0xFFE777, 0x70, phase, 3);  // изумрудный
+            curtain(canvas, b, 0.97f, 0.38f, 1.00f, 0x84ACFF, 0xB08CFA, 0x62, phase, 4);  // синий азотный
 
             // Общее свечение неба — медленно дышит. Центр держим на трети высоты, а не на
             // верхней кромке: свет, бивший из кромки, засвечивал верхний угол постоянно,
@@ -834,7 +834,7 @@ public class MainActivity extends Activity {
 
             cxF += 0.006f * ripple;                                  // в стороны — почти незаметно
             hwF *= (1f + 0.16f * breathe);                           // ширина дышит заметнее
-            botF += 0.105f * pulse;                                  // лучи ходят по высоте
+            botF += 0.140f * pulse;                                  // лучи ходят по высоте
             int a = (int) (alpha * (0.28f + 0.72f * (pulse * 0.5f + 0.5f)));
             a = (int) (a * (0.70f + 0.30f * (wave * 0.5f + 0.5f)));  // и вдоль полосы бежит волна
             if (a < 4) a = 4;
@@ -854,7 +854,7 @@ public class MainActivity extends Activity {
                     new float[]{0f, 0.18f, 0.82f, 1f}, Shader.TileMode.CLAMP);
             // Ход цвета по высоте полосы: красная кромка у верхушек, золотисто-жёлтая полоса,
             // основная зелёная масса и фиолетово-розовые нижние края.
-            Shader body = new LinearGradient(0, b.top, 0, bot, new int[]{
+            Shader body = new LinearGradient(0, b.top, 0, b.bottom, new int[]{
                     0x00FFFFFF,
                     tint(0xC0302B, a, 0.22f),     // красная кромка лучей
                     tint(0xD8703A, a, 0.34f),
