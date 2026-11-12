@@ -641,15 +641,15 @@ public class MainActivity extends Activity {
         // Длительность цикла = FRAMES × STEPS кадров экрана. При 60×12 цикл растягивался до
         // 12 секунд, и рисунок за один шаг менялся всё равно заметно. 30 кадров при 12 шагах
         // дают цикл 6 с и шаг всего 8% — движение читается как сплошное.
-        private static final int FRAMES = 12;
+        private static final int FRAMES = 8;
         /** Во сколько раз уменьшаем кадр: узор из плавных градиентов, мельчить не страшно. */
         private static final int SCALE = 8;
         /** Сколько шагов проявляется следующий кадр: больше — мягче переход. */
         /** За сколько секунд фон проходит полный круг — независимо от плавности перехода. */
         // Шаг перехода = FRAMES / (CYCLE_SECONDS × 60). Держим шаг на пределе точности
-        // прозрачности: 1 деление из 255 = 0,39%. При 12 кадрах это даёт цикл 51 с,
-        // то есть каждый кадр держится 4,3 с — больше времени на растворение и проявление.
-        private static final float CYCLE_SECONDS = 51f;
+        // прозрачности: 1 деление из 255 = 0,39%. При 8 кадрах это даёт цикл 34 с,
+        // то есть каждый кадр держится 4,3 с — времени на растворение и проявление больше.
+        private static final float CYCLE_SECONDS = 34f;
 
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         private android.graphics.Bitmap[] frames;
@@ -665,6 +665,9 @@ public class MainActivity extends Activity {
         private float pos;
         /** Сколько кадров уже готово (пишется из фонового потока, читается на экране). */
         private volatile int readyCount;
+        /** Сдвиг фазы рисунка. Каждый оборот смещается на «золотое» число, поэтому
+         *  набор кадров никогда не повторяется — однообразия в цикле нет. */
+        private float phaseShift;
 
         @Override
         public void draw(Canvas canvas) {
@@ -702,8 +705,16 @@ public class MainActivity extends Activity {
             // Прибавку считаем по времени шага развёртки, а не «порциями на кадр». Теперь
             // плавность перехода и скорость движения независимы: уменьшая шаг, мы больше
             // не растягиваем цикл. Предел плавности — разрядность прозрачности, 1/255.
-            pos += FRAMES / (CYCLE_SECONDS * 60f);   // шаг = 0,5% (шаг перехода = FRAMES / (CYCLE×60))
-            if (pos >= FRAMES) pos -= FRAMES;  // замкнутый цикл
+            pos += FRAMES / (CYCLE_SECONDS * 60f);
+            if (pos >= FRAMES) {
+                // Оборот закончился. Сдвигаем фазу и пересобираем набор кадров: рисунок
+                // следующего оборота будет другим, однообразия не возникнет. Восемь кадров
+                // рисуются около 0,2 с — прежний набор работает, пока готовится новый.
+                pos -= FRAMES;
+                phaseShift += 0.618f;
+                if (phaseShift > 100f) phaseShift -= 100f;
+                buildFrames(cacheW, cacheH);
+            }
             int idx = (int) pos;
             if (idx >= readyCount) {           // нужный кадр ещё рисуется — стоим на последнем готовом
                 pos = readyCount - 1;
@@ -725,9 +736,10 @@ public class MainActivity extends Activity {
             cacheH = h;
             frameIdx = 0;
             readyCount = 0;
+            final float shift = phaseShift;
             try {
                 frames = new android.graphics.Bitmap[FRAMES];
-                frames[0] = makeFrame(w, h, 0f);
+                frames[0] = makeFrame(w, h, shift);
                 readyCount = 1;
             } catch (Throwable t) {
                 frames = null;
@@ -737,7 +749,7 @@ public class MainActivity extends Activity {
                 public void run() {
                     for (int i = 1; i < FRAMES; i++) {
                         try {
-                            frames[i] = makeFrame(w, h, i / (float) FRAMES);
+                            frames[i] = makeFrame(w, h, shift + i / (float) FRAMES);
                             readyCount = i + 1;
                         } catch (Throwable e) {
                             return;
