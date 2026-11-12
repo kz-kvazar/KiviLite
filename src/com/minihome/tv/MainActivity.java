@@ -811,15 +811,14 @@ public class MainActivity extends Activity {
             // последнего кадра в первый незаметен: швов в анимации нет.
             // У каждой полосы своя скорость хода (1/2/3 оборота за цикл) и своя начальная
             // фаза, поэтому полосы не идут в такт и не собираются в одних и тех же местах.
-            float rate = 1 + (idx % 3);                     // скорости 2, 3, 1, 2, 3, 1
-            float ph = phase * rate + idx * 0.37f;
+            float ph = phase + idx * 0.43f;                 // один оборот за цикл, но фаза у каждой своя
             float sway = (float) Math.sin(2 * Math.PI * ph);                    // блуждание в стороны
             float breathe = (float) Math.sin(2 * Math.PI * (ph * 2 + 0.31f));   // дыхание по ширине
             float pulse = (float) Math.sin(2 * Math.PI * (ph * 3 + 0.62f));     // мерцание яркости
 
-            cxF += 0.085f * sway;                           // было 0.030 — ход почти втрое шире
-            hwF *= (1f + 0.20f * breathe);                  // было 0.13
-            botF += 0.060f * pulse;                         // было 0.045
+            cxF += 0.038f * sway;                           // прежний размах (было 0.085 — выходила дискотека)
+            hwF *= (1f + 0.15f * breathe);
+            botF += 0.050f * pulse;
             int a = (int) (alpha * (0.78f + 0.22f * (pulse * 0.5f + 0.5f)));
             if (a < 4) a = 4;
             if (a > 255) a = 255;
