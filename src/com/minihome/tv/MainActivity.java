@@ -807,16 +807,19 @@ public class MainActivity extends Activity {
                              int color, int alpha, float phase, int idx) {
             float w = b.width(), h = b.height();
 
-            // Движение задаём фазой. Множители целые — значит цикл замкнут и переход
+            // Движение задаём фазой. Множители ЦЕЛЫЕ — тогда цикл замкнут и переход
             // последнего кадра в первый незаметен: швов в анимации нет.
-            float ph = phase + idx * 0.19f;
-            float sway = (float) Math.sin(2 * Math.PI * ph);                    // покачивание в стороны
+            // У каждой полосы своя скорость хода (1/2/3 оборота за цикл) и своя начальная
+            // фаза, поэтому полосы не идут в такт и не собираются в одних и тех же местах.
+            float rate = 1 + (idx % 3);                     // скорости 2, 3, 1, 2, 3, 1
+            float ph = phase * rate + idx * 0.37f;
+            float sway = (float) Math.sin(2 * Math.PI * ph);                    // блуждание в стороны
             float breathe = (float) Math.sin(2 * Math.PI * (ph * 2 + 0.31f));   // дыхание по ширине
             float pulse = (float) Math.sin(2 * Math.PI * (ph * 3 + 0.62f));     // мерцание яркости
 
-            cxF += 0.030f * sway;
-            hwF *= (1f + 0.13f * breathe);
-            botF += 0.045f * pulse;
+            cxF += 0.085f * sway;                           // было 0.030 — ход почти втрое шире
+            hwF *= (1f + 0.20f * breathe);                  // было 0.13
+            botF += 0.060f * pulse;                         // было 0.045
             int a = (int) (alpha * (0.78f + 0.22f * (pulse * 0.5f + 0.5f)));
             if (a < 4) a = 4;
             if (a > 255) a = 255;
