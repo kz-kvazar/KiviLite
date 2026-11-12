@@ -643,10 +643,13 @@ public class MainActivity extends Activity {
     private class BgDrawable extends Drawable {
         /** Сколько кадров в цикле движения: больше — плавнее, но и памяти больше. */
         private static final int FRAMES = 20;
-        /** Во сколько раз уменьшаем кадр: узор из плавных градиентов, мельчить не страшно. */
-        private static final int SCALE = 8;
+        /** Во сколько раз уменьшаем кадр. 6 вместо 8: крупнее кадр — меньше ступенек
+         *  при растяжении, а полосы в градиентах от этого только слабее. */
+        private static final int SCALE = 6;
 
-        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        // DITHER_FLAG сглаживает переходы между уровнями цвета — без него на плавных
+        // градиентах видны полосы (в 8-битном цвете всего 256 уровней на канал).
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
         private android.graphics.Bitmap[] frames;
         private int cacheW, cacheH, frameIdx;
         /** Сколько кадров уже готово (пишется из фонового потока, читается на экране). */
