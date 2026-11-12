@@ -120,7 +120,7 @@ public class MainActivity extends Activity {
     private final Runnable bgTick = new Runnable() {
         public void run() {
             if (bg != null) bg.nextStep();
-            handler.postDelayed(this, 45);    // цикл около 3,6 с: движение живее прежнего
+            handler.postDelayed(this, 55);    // цикл около 4,4 с: спокойнее и плавнее
         }
     };
     private Set<String> hidden = new HashSet<String>();
@@ -750,11 +750,13 @@ public class MainActivity extends Activity {
             // Цвета взяты у настоящего сияния: основной зелёный 557,7 нм — самый частый,
             // выше идёт золотисто-жёлтая полоса (та самая «жёлтая» аврора), у верхушек лучей
             // красная кромка 630 нм, у нижних краёв фиолетовая 427,8 нм.
-            curtain(canvas, b, 0.09f, 0.32f, 0.95f, 0x7BF07B, 0xFFE066, 0x7E, phase, 0);  // зелёный с золотом
-            curtain(canvas, b, 0.32f, 0.48f, 1.00f, 0xAEF78C, 0xFFE97A, 0x6C, phase, 1);  // бледно-жёлто-зелёный
-            curtain(canvas, b, 0.56f, 0.30f, 0.88f, 0x9E78F0, 0xFF8CC8, 0x62, phase, 2);  // фиолетовый с розовым
-            curtain(canvas, b, 0.79f, 0.36f, 0.98f, 0x66EC9E, 0xFFE066, 0x52, phase, 3);  // изумрудный
-            curtain(canvas, b, 0.98f, 0.26f, 0.84f, 0x6690F5, 0x9E78F0, 0x46, phase, 4);  // синий азотный
+            // Полосы продлены за нижнюю кромку и разведены по ширине так, чтобы сияние
+            // занимало весь экран: раньше внизу оставалась ровная тёмная полоса.
+            curtain(canvas, b, 0.04f, 0.42f, 1.34f, 0x8CF68C, 0xFFE777, 0x9C, phase, 0);  // зелёный с золотом
+            curtain(canvas, b, 0.28f, 0.54f, 1.24f, 0xC0FA9C, 0xFFEE8C, 0x8C, phase, 1);  // бледно-жёлто-зелёный
+            curtain(canvas, b, 0.52f, 0.44f, 1.38f, 0xB08CFA, 0xFFA0D6, 0x7E, phase, 2);  // фиолетовый с розовым
+            curtain(canvas, b, 0.76f, 0.46f, 1.28f, 0x84F6B4, 0xFFE777, 0x70, phase, 3);  // изумрудный
+            curtain(canvas, b, 1.00f, 0.40f, 1.20f, 0x84ACFF, 0xB08CFA, 0x62, phase, 4);  // синий азотный
 
             // Общее свечение неба — медленно дышит. Центр держим на трети высоты, а не на
             // верхней кромке: свет, бивший из кромки, засвечивал верхний угол постоянно,
