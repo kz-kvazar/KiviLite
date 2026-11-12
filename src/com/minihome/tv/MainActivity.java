@@ -641,15 +641,14 @@ public class MainActivity extends Activity {
         // Длительность цикла = FRAMES × STEPS кадров экрана. При 60×12 цикл растягивался до
         // 12 секунд, и рисунок за один шаг менялся всё равно заметно. 30 кадров при 12 шагах
         // дают цикл 6 с и шаг всего 8% — движение читается как сплошное.
-        private static final int FRAMES = 8;
+        private static final int FRAMES = 6;
         /** Во сколько раз уменьшаем кадр: узор из плавных градиентов, мельчить не страшно. */
         private static final int SCALE = 8;
         /** Сколько шагов проявляется следующий кадр: больше — мягче переход. */
         /** За сколько секунд фон проходит полный круг — независимо от плавности перехода. */
-        // Шаг перехода = FRAMES / (CYCLE_SECONDS × 60). Держим шаг на пределе точности
-        // прозрачности: 1 деление из 255 = 0,39%. При 8 кадрах это даёт цикл 34 с,
-        // то есть каждый кадр держится 4,3 с — времени на растворение и проявление больше.
-        private static final float CYCLE_SECONDS = 34f;
+        // Шаг перехода = FRAMES / (CYCLE_SECONDS × 60), держим на пределе точности прозрачности
+        // (1 деление из 255 = 0,39%). При 6 кадрах цикл 27 с — каждый кадр держится 4,5 с.
+        private static final float CYCLE_SECONDS = 27f;
 
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         private android.graphics.Bitmap[] frames;
@@ -690,10 +689,26 @@ public class MainActivity extends Activity {
             // Гасить оба сразу нельзя: на непрозрачном фоне это даёт провал яркости в середине
             // перехода (до 25% темноты) — то самое мигание. При таком порядке новый кадр
             // проступает всё чётче по мере ухода старого, то есть появляется плавно.
-            canvas.drawBitmap(nxt, null, b, paint);              // новый кадр — основа
-            paint.setAlpha((int) (255 * (1f - blend)));
-            canvas.drawBitmap(cur, null, b, paint);              // старый растворяется и исчезает
-            paint.setAlpha(255);
+            // Проявление идёт сверху вниз полосами: старый кадр уходит, начиная с верхней
+            // кромки, новый открывается следом за ним. Полосы накладываются внахлёст, швов
+            // не видно, но направление смены читается глазом.
+            int H = b.height(), strips = 10, sh = (H + strips - 1) / strips;
+            for (int i = 0; i < strips; i++) {
+                int y0 = i * sh, y1 = Math.min(H, y0 + sh);
+                if (y0 >= y1) break;
+                float local = (blend * (strips + 2) - i) / 2f;
+                if (local < 0f) local = 0f;
+                if (local > 1f) local = 1f;
+                android.graphics.Rect dst = new android.graphics.Rect(b.left, y0, b.right, y1);
+                android.graphics.Rect sn = new android.graphics.Rect(0, y0 * nxt.getHeight() / H,
+                        nxt.getWidth(), Math.max(1, y1 * nxt.getHeight() / H));
+                android.graphics.Rect sc = new android.graphics.Rect(0, y0 * cur.getHeight() / H,
+                        cur.getWidth(), Math.max(1, y1 * cur.getHeight() / H));
+                canvas.drawBitmap(nxt, sn, dst, paint);
+                paint.setAlpha((int) (255 * (1f - local)));
+                canvas.drawBitmap(cur, sc, dst, paint);
+                paint.setAlpha(255);
+            }
         }
 
         /**
@@ -711,7 +726,9 @@ public class MainActivity extends Activity {
                 // следующего оборота будет другим, однообразия не возникнет. Восемь кадров
                 // рисуются около 0,2 с — прежний набор работает, пока готовится новый.
                 pos -= FRAMES;
-                phaseShift += 0.618f;
+                // Сдвиг небольшой: следующий набор кадров близок к прежнему, переход между
+                // оборотами незаметен, а иррациональная дробь не даёт повторов.
+                phaseShift += 0.236f;
                 if (phaseShift > 100f) phaseShift -= 100f;
                 buildFrames(cacheW, cacheH);
             }
@@ -880,20 +897,22 @@ public class MainActivity extends Activity {
                     new float[]{0f, 0.18f, 0.82f, 1f}, Shader.TileMode.CLAMP);
             // Ход цвета по высоте полосы: красная кромка у верхушек, золотисто-жёлтая полоса,
             // основная зелёная масса и фиолетово-розовые нижние края.
+            // Палитра без ступеньки. Раньше между точками были большие скачки оттенка при
+            // коротком расстоянии (красный сразу в золото) — это и читалось полосой.
+            // Теперь цвет идёт через промежуточные оттенки, а точки стоят ровнее.
+            int red1 = tint(0xC0302B, a, 0.18f), red2 = tint(0xCE4A32, a, 0.26f);
+            int org1 = tint(0xDC6840, a, 0.34f), org2 = tint(0xE8863E, a, 0.42f);
+            int gold1 = tint(accent, a, 0.52f), gold2 = tint(accent, a, 0.64f);
+            int grn0 = tint(color, a, 0.80f), grn1 = tint(color, a, 0.92f), grn2 = tint(color, a, 1.00f);
+            int grn3 = tint(color, a, 0.92f), grn4 = tint(color, a, 0.80f);
+            int tel1 = tint(0x8FD9AE, a, 0.66f), tel2 = tint(0x8CC2C0, a, 0.54f);
+            int vio1 = tint(0x9E78F0, a, 0.42f), vio2 = tint(0xB48CE8, a, 0.32f);
+            int pnk1 = tint(0xE878B0, a, 0.20f), pnk2 = tint(0xE878B0, a, 0.10f);
             Shader body = new LinearGradient(0, b.top, 0, b.bottom, new int[]{
-                    0x00FFFFFF,
-                    tint(0xC0302B, a, 0.22f),     // красная кромка лучей
-                    tint(0xD8703A, a, 0.34f),
-                    tint(accent, a, 0.58f),       // золотисто-жёлтая полоса
-                    tint(accent, a, 0.78f),
-                    tint(color, a, 0.94f),        // основной цвет полосы
-                    tint(color, a, 1.00f),
-                    tint(color, a, 0.86f),
-                    tint(0x6FC9A0, a, 0.66f),
-                    tint(0x9E78F0, a, 0.44f),     // фиолетовые кромки
-                    tint(0xE878B0, a, 0.14f),     // розовая подложка
-                    0x00FFFFFF},
-                    new float[]{0f, 0.05f, 0.11f, 0.20f, 0.29f, 0.42f, 0.55f, 0.68f, 0.79f, 0.90f, 0.97f, 1f},
+                    0x00FFFFFF, red1, red2, org1, org2, gold1, gold2,
+                    grn0, grn1, grn2, grn3, grn4, tel1, tel2, vio1, vio2, pnk1, pnk2, 0x00FFFFFF},
+                    new float[]{0f, 0.04f, 0.08f, 0.13f, 0.18f, 0.24f, 0.30f, 0.38f, 0.44f, 0.50f,
+                                0.56f, 0.62f, 0.70f, 0.76f, 0.83f, 0.88f, 0.93f, 0.97f, 1f},
                     Shader.TileMode.CLAMP);
             paint.setShader(new android.graphics.ComposeShader(body, side, android.graphics.PorterDuff.Mode.DST_IN));
             // Края лучей размываем: без этого полоса выглядит нарисованной, с резкой кромкой.
