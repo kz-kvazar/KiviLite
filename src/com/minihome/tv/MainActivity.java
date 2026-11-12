@@ -119,8 +119,8 @@ public class MainActivity extends Activity {
     /** Живая аврора: пока лаунчер на экране, кадры фона сменяются по таймеру. */
     private final Runnable bgTick = new Runnable() {
         public void run() {
-            if (bg != null) bg.nextFrame();
-            handler.postDelayed(this, 250);   // 20 кадров по 0,25 с — цикл 5 секунд
+            if (bg != null) bg.nextStep();
+            handler.postDelayed(this, 66);    // 15 шагов в секунду: плавно и недорого
         }
     };
     private Set<String> hidden = new HashSet<String>();
@@ -641,10 +641,14 @@ public class MainActivity extends Activity {
         private static final int FRAMES = 20;
         /** Во сколько раз уменьшаем кадр: узор из плавных градиентов, мельчить не страшно. */
         private static final int SCALE = 8;
+        /** Сколько шагов проявляется следующий кадр: больше — мягче переход. */
+        private static final int STEPS = 4;
 
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         private android.graphics.Bitmap[] frames;
         private int cacheW, cacheH, frameIdx;
+        /** Плотность перехода к следующему кадру: 0 — только текущий, 1 — уже следующий. */
+        private float blend;
         /** Сколько кадров уже готово (пишется из фонового потока, читается на экране). */
         private volatile int readyCount;
 
@@ -654,23 +658,38 @@ public class MainActivity extends Activity {
             if (frames == null || cacheW != b.width() || cacheH != b.height()) {
                 buildFrames(b.width(), b.height());
             }
-            android.graphics.Bitmap shown = frames == null ? null : frames[frameIdx];
-            if (shown != null) {
-                canvas.drawBitmap(shown, null, b, paint);   // кадр готов — просто копируем
+            android.graphics.Bitmap cur = frames == null ? null : frames[frameIdx];
+            if (cur == null) {
+                paintBackground(canvas, b, 0f);
                 return;
             }
-            paintBackground(canvas, b, 0f);
+            int nextIdx = (frameIdx + 1) % FRAMES;
+            android.graphics.Bitmap nxt = nextIdx < readyCount ? frames[nextIdx] : null;
+            if (nxt == null || blend <= 0.001f) {
+                canvas.drawBitmap(cur, null, b, paint);   // перехода нет — просто копия кадра
+                return;
+            }
+            // Плавно проявляем следующий кадр поверх текущего. Без этого глаз видит
+            // смену картинки раз в четверть секунды, то есть рывки, а не движение.
+            paint.setAlpha((int) (255 * (1f - blend)));
+            canvas.drawBitmap(cur, null, b, paint);
+            paint.setAlpha((int) (255 * blend));
+            canvas.drawBitmap(nxt, null, b, paint);
+            paint.setAlpha(255);
         }
 
         /**
-         * Следующий кадр движения. Вызывается по таймеру, пока лаунчер на экране.
-         * Стоит это ровно одну копию картинки — поэтому аврора не грузит процессор.
+         * Шаг движения: сперва плавно проявляем следующий кадр, потом делаем его текущим.
+         * Стоит это две копии картинки — процессор почти свободен, зато движение без рывков.
          */
-        void nextFrame() {
+        void nextStep() {
             if (frames == null) return;
-            int next = (frameIdx + 1) % FRAMES;
-            if (next >= readyCount) return;      // кадр ещё рисуется — стоим на текущем
-            frameIdx = next;
+            blend += 1f / STEPS;
+            if (blend >= 1f) {
+                blend = 0f;
+                int next = (frameIdx + 1) % FRAMES;
+                if (next < readyCount) frameIdx = next;   // кадр ещё рисуется — стоим на текущем
+            }
             invalidateSelf();
         }
 
@@ -728,11 +747,14 @@ public class MainActivity extends Activity {
             paint.setShader(null);
 
             // Занавеси северного сияния — без точек и звёзд
-            curtain(canvas, b, 0.09f, 0.32f, 0.95f, 0x3BE8A8, 0x52, phase, 0);   // зелёный
-            curtain(canvas, b, 0.32f, 0.48f, 1.00f, 0x2FD8D8, 0x44, phase, 1);   // бирюзовый до самого низа
-            curtain(canvas, b, 0.56f, 0.30f, 0.88f, 0x8A6CF0, 0x3E, phase, 2);   // фиолетовый
-            curtain(canvas, b, 0.79f, 0.36f, 0.98f, 0x3BE8A8, 0x30, phase, 3);   // ещё зелёный
-            curtain(canvas, b, 0.98f, 0.26f, 0.84f, 0x5AD8FF, 0x28, phase, 4);   // голубой у правого края
+            // Цвета взяты у настоящего сияния: основной зелёный 557,7 нм — самый частый,
+            // выше идёт золотисто-жёлтая полоса (та самая «жёлтая» аврора), у верхушек лучей
+            // красная кромка 630 нм, у нижних краёв фиолетовая 427,8 нм.
+            curtain(canvas, b, 0.09f, 0.32f, 0.95f, 0x6BE86B, 0xE8C84A, 0x52, phase, 0);  // зелёный с золотом
+            curtain(canvas, b, 0.32f, 0.48f, 1.00f, 0x9BE87A, 0xF0D860, 0x44, phase, 1);  // бледно-жёлто-зелёный
+            curtain(canvas, b, 0.56f, 0.30f, 0.88f, 0x8A5FD8, 0xE878B0, 0x3E, phase, 2);  // фиолетовый с розовым
+            curtain(canvas, b, 0.79f, 0.36f, 0.98f, 0x50D98A, 0xE8C84A, 0x30, phase, 3);  // изумрудный
+            curtain(canvas, b, 0.98f, 0.26f, 0.84f, 0x4A6EE0, 0x8A5FD8, 0x28, phase, 4);  // синий азотный
 
             // Мягкое свечение у верхней кромки — медленно дышит
             int glowA = (int) (0x22 * (0.60f + 0.40f * (float) Math.sin(phase * 2 * Math.PI)));
@@ -760,8 +782,16 @@ public class MainActivity extends Activity {
          * Занавесь сияния: волнистая вертикальная полоса.
          * Края мягкие по бокам, а книзу полоса растворяется — резкой границы нет.
          */
+        /** Цвет полосы с нужной плотностью: k — доля от общей прозрачности. */
+        private int tint(int rgb, int alpha, float k) {
+            int a = (int) (alpha * k);
+            if (a < 0) a = 0;
+            if (a > 255) a = 255;
+            return (a << 24) | (rgb & 0x00FFFFFF);
+        }
+
         private void curtain(Canvas canvas, Rect b, float cxF, float hwF, float botF,
-                             int color, int alpha, float phase, int idx) {
+                             int color, int accent, int alpha, float phase, int idx) {
             float w = b.width(), h = b.height();
 
             // Движение задаём фазой. Множители целые — значит цикл замкнут и переход
@@ -779,7 +809,6 @@ public class MainActivity extends Activity {
             if (a > 255) a = 255;
 
             float cx = b.left + w * cxF, hw = w * hwF, bot = b.top + h * botF;
-            int c = (a << 24) | (color & 0x00FFFFFF);
             Path p = new Path();
             p.moveTo(cx - hw, b.top - dp(4));
             p.cubicTo(cx - hw * 1.18f, h * 0.22f, cx - hw * 0.68f, h * 0.48f, cx - hw * 0.92f, bot);
@@ -789,12 +818,21 @@ public class MainActivity extends Activity {
 
             // Мягкие края по бокам
             Shader side = new LinearGradient(cx - hw, 0, cx + hw, 0,
-                    new int[]{0x00000000, c, c, 0x00000000}, new float[]{0f, 0.32f, 0.68f, 1f}, Shader.TileMode.CLAMP);
-            // И плавное растворение книзу — строго до нуля у нижней кромки
-            Shader fadeOut = new LinearGradient(0, b.top, 0, bot,
-                    new int[]{0xFFFFFFFF, 0xFFFFFFFF, 0xA0FFFFFF, 0x28FFFFFF, 0x00FFFFFF},
-                    new float[]{0f, 0.30f, 0.62f, 0.86f, 1f}, Shader.TileMode.CLAMP);
-            paint.setShader(new android.graphics.ComposeShader(side, fadeOut, android.graphics.PorterDuff.Mode.DST_IN));
+                    new int[]{0x00FFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x00FFFFFF},
+                    new float[]{0f, 0.32f, 0.68f, 1f}, Shader.TileMode.CLAMP);
+            // Ход цвета по высоте полосы: красная кромка у верхушек, золотисто-жёлтая полоса,
+            // основная зелёная масса и фиолетово-розовые нижние края.
+            Shader body = new LinearGradient(0, b.top, 0, bot, new int[]{
+                    0x00FFFFFF,
+                    tint(0xC0302B, a, 0.30f),     // красная кромка лучей
+                    tint(accent, a, 0.72f),       // золотисто-жёлтая полоса
+                    tint(color, a, 1.00f),        // основной цвет полосы
+                    tint(color, a, 0.78f),
+                    tint(0x8A5FD8, a, 0.45f),     // фиолетовые кромки
+                    tint(0xE878B0, a, 0.20f),     // розовая подложка
+                    0x00FFFFFF},
+                    new float[]{0f, 0.07f, 0.17f, 0.36f, 0.62f, 0.85f, 0.95f, 1f}, Shader.TileMode.CLAMP);
+            paint.setShader(new android.graphics.ComposeShader(body, side, android.graphics.PorterDuff.Mode.DST_IN));
             canvas.drawPath(p, paint);
             paint.setShader(null);
         }
@@ -986,8 +1024,17 @@ public class MainActivity extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         rootView = root;
-        // Фон: градиент + очень бледная векторная графика (дуги, точки) — читаемость не страдает.
-        root.setBackgroundDrawable(bg = new BgDrawable());
+
+        // Фон живёт отдельным слоем под интерфейсом. Так его движение перерисовывает
+        // только сам фон, а не весь экран: именно из-за общей перерисовки движение
+        // и выглядело рывками, часто менять кадры было слишком дорого.
+        android.widget.FrameLayout stage = new android.widget.FrameLayout(this);
+        View bgLayer = new View(this);
+        bgLayer.setBackgroundDrawable(bg = new BgDrawable());
+        stage.addView(bgLayer, new android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        stage.addView(root, new android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         LinearLayout header = new LinearLayout(this);
         header.setOrientation(LinearLayout.HORIZONTAL);
@@ -1221,7 +1268,7 @@ public class MainActivity extends Activity {
         gridView = grid;
         root.addView(grid, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
-        setContentView(root);
+        setContentView(stage);
         // Следим за установкой и удалением приложений: только тогда и пересобираем список.
         IntentFilter pkgFilter = new IntentFilter();
         pkgFilter.addAction(Intent.ACTION_PACKAGE_ADDED);
