@@ -119,8 +119,8 @@ public class MainActivity extends Activity {
     /** Живая аврора: пока лаунчер на экране, кадры фона сменяются по таймеру. */
     private final Runnable bgTick = new Runnable() {
         public void run() {
-            if (bg != null) bg.nextStep();
-            handler.postDelayed(this, 60);    // цикл около 8,6 с: неспешное движение
+            if (bg != null) bg.nextFrame();
+            handler.postDelayed(this, 250);   // 20 кадров по 0,25 с — цикл 5 секунд
         }
     };
     private Set<String> hidden = new HashSet<String>();
@@ -638,41 +638,15 @@ public class MainActivity extends Activity {
     /** Фон лаунчера: тёмное небо, занавеси северного сияния и мягкое затухание к низу. */
     private class BgDrawable extends Drawable {
         /** Сколько кадров в цикле движения: больше — плавнее, но и памяти больше. */
-        // Длительность цикла = FRAMES × STEPS кадров экрана. При 60×12 цикл растягивался до
-        // 12 секунд, и рисунок за один шаг менялся всё равно заметно. 30 кадров при 12 шагах
-        // дают цикл 6 с и шаг всего 8% — движение читается как сплошное.
-        private static final int FRAMES = 8;
+        private static final int FRAMES = 20;
         /** Во сколько раз уменьшаем кадр: узор из плавных градиентов, мельчить не страшно. */
         private static final int SCALE = 8;
-        /** Сколько шагов проявляется следующий кадр: больше — мягче переход. */
-        /** За сколько секунд фон проходит полный круг — независимо от плавности перехода. */
-        // Кадр анимации — 5000 мс: один кадр в пять секунд. Переход занимает весь кадр,
-        // то есть около 300 ступеней экрана — это уже на пределе точности прозрачности.
-        private static final float FRAME_MS = 5000f;
-        /** Доля времени кадра на переход: 1 — переход идёт весь кадр, статики нет. */
-        private static final float MOVE_PART = 1f;
-        /** Разница между соседними кадрами набора — минимальная, 1% периода волны. */
-        // Разброс между кадрами набора уменьшен вдвое (было 0,01).
-        private static final float PHASE_STEP = 0.005f;
-        private static final float CYCLE_SECONDS = FRAMES * FRAME_MS / 1000f;
 
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         private android.graphics.Bitmap[] frames;
         private int cacheW, cacheH, frameIdx;
-        /** Плотность перехода к следующему кадру: 0 — только текущий, 1 — уже следующий. */
-        private float blend;
-        /**
-         * Непрерывная фаза движения в кадрах: целая часть — номер кадра, дробная — плотность
-         * перехода к следующему. Так плавность (сколько шагов на кадр) и скорость (сколько
-         * кадров в секунду) независимы: раньше они были связаны одним счётчиком, и плавный
-         * переход автоматически растягивал весь цикл.
-         */
-        private float pos;
         /** Сколько кадров уже готово (пишется из фонового потока, читается на экране). */
         private volatile int readyCount;
-        /** Сдвиг фазы рисунка. Каждый оборот смещается на «золотое» число, поэтому
-         *  набор кадров никогда не повторяется — однообразия в цикле нет. */
-        private float phaseShift;
 
         @Override
         public void draw(Canvas canvas) {
@@ -680,77 +654,23 @@ public class MainActivity extends Activity {
             if (frames == null || cacheW != b.width() || cacheH != b.height()) {
                 buildFrames(b.width(), b.height());
             }
-            android.graphics.Bitmap cur = frames == null ? null : frames[frameIdx];
-            if (cur == null) {
-                paintBackground(canvas, b, 0f);
+            android.graphics.Bitmap shown = frames == null ? null : frames[frameIdx];
+            if (shown != null) {
+                canvas.drawBitmap(shown, null, b, paint);   // кадр готов — просто копируем
                 return;
             }
-            int nextIdx = (frameIdx + 1) % FRAMES;
-            android.graphics.Bitmap nxt = nextIdx < readyCount ? frames[nextIdx] : null;
-            if (nxt == null || blend <= 0.001f) {
-                canvas.drawBitmap(cur, null, b, paint);   // перехода нет — просто копия кадра
-                return;
-            }
-            // Новый кадр ложится непрозрачной основой, а старый поверх него растворяется.
-            // Гасить оба сразу нельзя: на непрозрачном фоне это даёт провал яркости в середине
-            // перехода (до 25% темноты) — то самое мигание. При таком порядке новый кадр
-            // проступает всё чётче по мере ухода старого, то есть появляется плавно.
-            // Проявление идёт сверху вниз полосами: старый кадр уходит, начиная с верхней
-            // кромки, новый открывается следом за ним. Полосы накладываются внахлёст, швов
-            // не видно, но направление смены читается глазом.
-            int H = b.height(), strips = 10, sh = (H + strips - 1) / strips;
-            for (int i = 0; i < strips; i++) {
-                int y0 = i * sh, y1 = Math.min(H, y0 + sh);
-                if (y0 >= y1) break;
-                float local = (blend * (strips + 2) - i) / 2f;
-                if (local < 0f) local = 0f;
-                if (local > 1f) local = 1f;
-                android.graphics.Rect dst = new android.graphics.Rect(b.left, y0, b.right, y1);
-                android.graphics.Rect sn = new android.graphics.Rect(0, y0 * nxt.getHeight() / H,
-                        nxt.getWidth(), Math.max(1, y1 * nxt.getHeight() / H));
-                android.graphics.Rect sc = new android.graphics.Rect(0, y0 * cur.getHeight() / H,
-                        cur.getWidth(), Math.max(1, y1 * cur.getHeight() / H));
-                // Новый кадр набирает плотность, старый одновременно её теряет — как вы описали.
-                paint.setAlpha((int) (255 * local));
-                canvas.drawBitmap(nxt, sn, dst, paint);
-                paint.setAlpha((int) (255 * (1f - local)));
-                canvas.drawBitmap(cur, sc, dst, paint);
-                paint.setAlpha(255);
-            }
+            paintBackground(canvas, b, 0f);
         }
 
         /**
-         * Шаг движения: сперва плавно проявляем следующий кадр, потом делаем его текущим.
-         * Стоит это две копии картинки — процессор почти свободен, зато движение без рывков.
+         * Следующий кадр движения. Вызывается по таймеру, пока лаунчер на экране.
+         * Стоит это ровно одну копию картинки — поэтому аврора не грузит процессор.
          */
-        void nextStep() {
-            if (frames == null || readyCount < 2) return;
-            // Прибавку считаем по времени шага развёртки, а не «порциями на кадр». Теперь
-            // плавность перехода и скорость движения независимы: уменьшая шаг, мы больше
-            // не растягиваем цикл. Предел плавности — разрядность прозрачности, 1/255.
-            pos += FRAMES / (CYCLE_SECONDS * 60f);   // ровно 18 кадров экрана на кадр анимации
-            if (pos >= FRAMES) {
-                // Оборот закончился. Сдвигаем фазу и пересобираем набор кадров: рисунок
-                // следующего оборота будет другим, однообразия не возникнет. Восемь кадров
-                // рисуются около 0,2 с — прежний набор работает, пока готовится новый.
-                pos -= FRAMES;
-                // Сдвиг минимальный: следующий набор кадров почти не отличается от прежнего,
-                // поэтому даже граница между оборотами незаметна. Дробь иррациональна — повторов нет.
-                // Разница между кадрами — минимальная: 0,01 периода волны.
-                phaseShift += PHASE_STEP * FRAMES;   // сдвиг на оборот, чтобы стык не повторялся
-                if (phaseShift > 100f) phaseShift -= 100f;
-                buildFrames(cacheW, cacheH);
-            }
-            int idx = (int) pos;
-            if (idx >= readyCount) {           // нужный кадр ещё рисуется — стоим на последнем готовом
-                pos = readyCount - 1;
-                idx = readyCount - 1;
-            }
-            frameIdx = idx;
-            // Внутри кадра: первые 250 мс идёт переход, последние 50 мс кадр стоит неизменным.
-            float raw = pos - idx;                        // 0..1 на весь кадр (18 шагов экрана)
-            float moved = raw / MOVE_PART;                // растягиваем переход на 15 шагов
-            blend = moved > 1f ? 1f : moved;              // далее 3 шага статики
+        void nextFrame() {
+            if (frames == null) return;
+            int next = (frameIdx + 1) % FRAMES;
+            if (next >= readyCount) return;      // кадр ещё рисуется — стоим на текущем
+            frameIdx = next;
             invalidateSelf();
         }
 
@@ -765,10 +685,9 @@ public class MainActivity extends Activity {
             cacheH = h;
             frameIdx = 0;
             readyCount = 0;
-            final float shift = phaseShift;
             try {
                 frames = new android.graphics.Bitmap[FRAMES];
-                frames[0] = makeFrame(w, h, shift);
+                frames[0] = makeFrame(w, h, 0f);
                 readyCount = 1;
             } catch (Throwable t) {
                 frames = null;
@@ -778,9 +697,7 @@ public class MainActivity extends Activity {
                 public void run() {
                     for (int i = 1; i < FRAMES; i++) {
                         try {
-                            // Разницу между кадрами задаёт PHASE_STEP, а не i/FRAMES. Раньше здесь
-                            // стояло i/FRAMES (12,5% периода волны на кадр) — отсюда резкая смена.
-                            frames[i] = makeFrame(w, h, shift + i * PHASE_STEP);
+                            frames[i] = makeFrame(w, h, i / (float) FRAMES);
                             readyCount = i + 1;
                         } catch (Throwable e) {
                             return;
@@ -811,38 +728,30 @@ public class MainActivity extends Activity {
             paint.setShader(null);
 
             // Занавеси северного сияния — без точек и звёзд
-            // Цвета взяты у настоящего сияния: основной зелёный 557,7 нм — самый частый,
-            // выше идёт золотисто-жёлтая полоса (та самая «жёлтая» аврора), у верхушек лучей
-            // красная кромка 630 нм, у нижних краёв фиолетовая 427,8 нм.
-            // Полосы продлены за нижнюю кромку и разведены по ширине так, чтобы сияние
-            // занимало весь экран: раньше внизу оставалась ровная тёмная полоса.
-            curtain(canvas, b, 0.06f, 0.40f, 1.06f, 0x8CF68C, 0xFFE777, 0x9C, phase, 0);  // зелёный с золотом
-            curtain(canvas, b, 0.30f, 0.50f, 1.02f, 0xC0FA9C, 0xFFEE8C, 0x8C, phase, 1);  // бледно-жёлто-зелёный
-            curtain(canvas, b, 0.52f, 0.42f, 1.08f, 0xB08CFA, 0xFFA0D6, 0x7E, phase, 2);  // фиолетовый с розовым
-            curtain(canvas, b, 0.74f, 0.44f, 1.04f, 0x84F6B4, 0xFFE777, 0x70, phase, 3);  // изумрудный
-            curtain(canvas, b, 0.97f, 0.38f, 1.00f, 0x84ACFF, 0xB08CFA, 0x62, phase, 4);  // синий азотный
+            curtain(canvas, b, 0.09f, 0.32f, 0.95f, 0x3BE8A8, 0x52, phase, 0);   // зелёный
+            curtain(canvas, b, 0.32f, 0.48f, 1.00f, 0x2FD8D8, 0x44, phase, 1);   // бирюзовый до самого низа
+            curtain(canvas, b, 0.56f, 0.30f, 0.88f, 0x8A6CF0, 0x3E, phase, 2);   // фиолетовый
+            curtain(canvas, b, 0.79f, 0.36f, 0.98f, 0x3BE8A8, 0x30, phase, 3);   // ещё зелёный
+            curtain(canvas, b, 0.98f, 0.26f, 0.84f, 0x5AD8FF, 0x28, phase, 4);   // голубой у правого края
 
-            // Общее свечение неба — медленно дышит. Центр держим на трети высоты, а не на
-            // верхней кромке: свет, бивший из кромки, засвечивал верхний угол постоянно,
-            // и углы по краям экрана оставались светлее всего остального.
-            int glowA = (int) (0x18 * (0.5f + 0.5f * (float) Math.sin(phase * 2 * Math.PI)));
-            if (glowA < 0) glowA = 0;   // гаснет полностью: постоянной засветки на экране нет
-            paint.setShader(new RadialGradient(w * 0.5f, h * 0.44f, w * 1.05f,
+            // Мягкое свечение у верхней кромки — медленно дышит
+            int glowA = (int) (0x22 * (0.60f + 0.40f * (float) Math.sin(phase * 2 * Math.PI)));
+            if (glowA < 5) glowA = 5;
+            paint.setShader(new RadialGradient(w * 0.5f, b.top, w * 0.75f,
                     new int[]{(glowA << 24) | 0x5FE8C0, 0x00000000}, null, Shader.TileMode.CLAMP));
-            canvas.drawRect(b, paint);
+            canvas.drawRect(b.left, b.top, b.right, h * 0.5f, paint);
             paint.setShader(null);
 
-            // Затухание к низу совсем лёгкое: плотная заливка внизу давала ровную тёмную
-            // полосу, из-за которой казалось, что сияние не доходит до нижней кромки.
+            // Плавное затухание до самого низа: без чёрного, в тёмно-синий
             paint.setShader(new LinearGradient(0, b.top, 0, b.bottom,
-                    new int[]{0x00000000, 0x070A1024, 0x110C1430, 0x1D0C1430, 0x2A0E1630, 0x360E1630},
-                    new float[]{0f, 0.32f, 0.55f, 0.74f, 0.90f, 1f}, Shader.TileMode.CLAMP));
+                    new int[]{0x00000000, 0x100A1024, 0x260C1430, 0x440C1430, 0x620E1630, 0x7A0E1630},
+                    new float[]{0f, 0.25f, 0.48f, 0.68f, 0.88f, 1f}, Shader.TileMode.CLAMP));
             canvas.drawRect(b, paint);
             paint.setShader(null);
 
-            // Виньетка по краям совсем мягкая: она тоже добавляла углам лишнюю темноту
-            paint.setShader(new RadialGradient(w * 0.5f, h * 0.5f, Math.max(w, h) * 0.86f,
-                    new int[]{0x00000000, 0x00000000, 0x1E0C1430}, new float[]{0f, 0.72f, 1f}, Shader.TileMode.CLAMP));
+            // Виньетка по краям
+            paint.setShader(new RadialGradient(w * 0.5f, h * 0.5f, Math.max(w, h) * 0.76f,
+                    new int[]{0x00000000, 0x00000000, 0x380C1430}, new float[]{0f, 0.62f, 1f}, Shader.TileMode.CLAMP));
             canvas.drawRect(b, paint);
             paint.setShader(null);
         }
@@ -851,89 +760,43 @@ public class MainActivity extends Activity {
          * Занавесь сияния: волнистая вертикальная полоса.
          * Края мягкие по бокам, а книзу полоса растворяется — резкой границы нет.
          */
-        /** Цвет полосы с нужной плотностью: k — доля от общей прозрачности. */
-        private int tint(int rgb, int alpha, float k) {
-            int a = (int) (alpha * k);
-            if (a < 0) a = 0;
-            if (a > 255) a = 255;
-            return (a << 24) | (rgb & 0x00FFFFFF);
-        }
-
         private void curtain(Canvas canvas, Rect b, float cxF, float hwF, float botF,
-                             int color, int accent, int alpha, float phase, int idx) {
+                             int color, int alpha, float phase, int idx) {
             float w = b.width(), h = b.height();
 
             // Движение задаём фазой. Множители целые — значит цикл замкнут и переход
             // последнего кадра в первый незаметен: швов в анимации нет.
-            // Настоящее сияние почти не ходит в стороны. Лучи разгораются и гаснут на месте,
-            // опускаются и поднимаются по высоте, а вдоль занавеси бегут волны свечения —
-            // это называют «пламенеющим сиянием». Боковое смещение — лишь лёгкая рябь.
             float ph = phase + idx * 0.19f;
-            // Частоты движения намеренно низкие. Раньше волна успевала 5 циклов за оборот, то
-            // есть рисунок менялся на 20% за кадр — глаз читал это как рывок, а не движение.
-            // Частоты намеренно низкие: при двух-трёх циклах мерцания на оборот яркость
-            // прыгала на 15-24% за кадр, и это читалось как дёргание. Теперь за кадр
-            // яркость меняется на 3-6%, движение воспринимается сплошным.
-            float ripple  = (float) Math.sin(2 * Math.PI * ph);                 // лёгкая рябь
-            float breathe = (float) Math.sin(2 * Math.PI * (ph * 1 + 0.31f));   // складки по ширине
-            float pulse   = (float) Math.sin(2 * Math.PI * (ph * 1 + 0.62f));   // разгорание и угасание
-            float wave    = (float) Math.sin(2 * Math.PI * (ph * 2 + 0.15f));   // бегущая волна
+            float sway = (float) Math.sin(2 * Math.PI * ph);                    // покачивание в стороны
+            float breathe = (float) Math.sin(2 * Math.PI * (ph * 2 + 0.31f));   // дыхание по ширине
+            float pulse = (float) Math.sin(2 * Math.PI * (ph * 3 + 0.62f));     // мерцание яркости
 
-            cxF += 0.022f * ripple;                                  // лёгкое смещение в стороны
-            hwF *= (1f + 0.30f * breathe);                           // ширина дышит заметно
-            botF += 0.200f * pulse;                                  // лучи ходят по высоте
-            int a = (int) (alpha * (0.28f + 0.72f * (pulse * 0.5f + 0.5f)));
-            a = (int) (a * (0.70f + 0.30f * (wave * 0.5f + 0.5f)));  // и вдоль полосы бежит волна
+            cxF += 0.030f * sway;
+            hwF *= (1f + 0.13f * breathe);
+            botF += 0.045f * pulse;
+            int a = (int) (alpha * (0.78f + 0.22f * (pulse * 0.5f + 0.5f)));
             if (a < 4) a = 4;
             if (a > 255) a = 255;
 
             float cx = b.left + w * cxF, hw = w * hwF, bot = b.top + h * botF;
-            float swayIn = breathe;
+            int c = (a << 24) | (color & 0x00FFFFFF);
             Path p = new Path();
-            // Изгиб задаём опорными точками в верхней половине экрана: там движение видно.
-            float lean = hw * (0.22f + 0.30f * swayIn);   // наклон полосы «дыханием»
-            // Верхний конец полосы тоже гуляет: раньше он жёстко стоял на кромке экрана,
-            // и верх выглядел статичным — менялась только плотность.
-            float topY = b.top - dp(4) + h * (0.03f * pulse + 0.05f * breathe);
-            float topX = hw * 0.30f * breathe;
-            p.moveTo(cx - hw + topX, topY);
-            p.cubicTo(cx - hw * 1.06f - lean, h * 0.22f + h * 0.05f * pulse,
-                      cx - hw * 0.70f + lean * 0.4f, h * 0.54f, cx - hw * 0.92f, bot);
+            p.moveTo(cx - hw, b.top - dp(4));
+            p.cubicTo(cx - hw * 1.18f, h * 0.22f, cx - hw * 0.68f, h * 0.48f, cx - hw * 0.92f, bot);
             p.lineTo(cx + hw * 0.92f, bot);
-            p.cubicTo(cx + hw * 0.70f - lean * 0.4f, h * 0.54f,
-                      cx + hw * 1.06f + lean, h * 0.22f + h * 0.05f * pulse,
-                      cx + hw - topX, topY);
+            p.cubicTo(cx + hw * 0.68f, h * 0.48f, cx + hw * 1.18f, h * 0.22f, cx + hw, b.top - dp(4));
             p.close();
 
             // Мягкие края по бокам
             Shader side = new LinearGradient(cx - hw, 0, cx + hw, 0,
-                    new int[]{0x00FFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x00FFFFFF},
-                    new float[]{0f, 0.18f, 0.82f, 1f}, Shader.TileMode.CLAMP);
-            // Ход цвета по высоте полосы: красная кромка у верхушек, золотисто-жёлтая полоса,
-            // основная зелёная масса и фиолетово-розовые нижние края.
-            // Палитра без ступеньки. Раньше между точками были большие скачки оттенка при
-            // коротком расстоянии (красный сразу в золото) — это и читалось полосой.
-            // Теперь цвет идёт через промежуточные оттенки, а точки стоят ровнее.
-            int red1 = tint(0xC0302B, a, 0.18f), red2 = tint(0xCE4A32, a, 0.26f);
-            int org1 = tint(0xDC6840, a, 0.34f), org2 = tint(0xE8863E, a, 0.42f);
-            int gold1 = tint(accent, a, 0.52f), gold2 = tint(accent, a, 0.64f);
-            int grn0 = tint(color, a, 0.80f), grn1 = tint(color, a, 0.92f), grn2 = tint(color, a, 1.00f);
-            int grn3 = tint(color, a, 0.92f), grn4 = tint(color, a, 0.80f);
-            int tel1 = tint(0x8FD9AE, a, 0.66f), tel2 = tint(0x8CC2C0, a, 0.54f);
-            int vio1 = tint(0x9E78F0, a, 0.42f), vio2 = tint(0xB48CE8, a, 0.32f);
-            int pnk1 = tint(0xE878B0, a, 0.20f), pnk2 = tint(0xE878B0, a, 0.10f);
-            Shader body = new LinearGradient(0, b.top, 0, b.bottom, new int[]{
-                    0x00FFFFFF, red1, red2, org1, org2, gold1, gold2,
-                    grn0, grn1, grn2, grn3, grn4, tel1, tel2, vio1, vio2, pnk1, pnk2, 0x00FFFFFF},
-                    new float[]{0f, 0.04f, 0.08f, 0.13f, 0.18f, 0.24f, 0.30f, 0.38f, 0.44f, 0.50f,
-                                0.56f, 0.62f, 0.70f, 0.76f, 0.83f, 0.88f, 0.93f, 0.97f, 1f},
-                    Shader.TileMode.CLAMP);
-            paint.setShader(new android.graphics.ComposeShader(body, side, android.graphics.PorterDuff.Mode.DST_IN));
-            // Края лучей размываем: без этого полоса выглядит нарисованной, с резкой кромкой.
-            paint.setMaskFilter(new android.graphics.BlurMaskFilter(dp(7), android.graphics.BlurMaskFilter.Blur.NORMAL));
+                    new int[]{0x00000000, c, c, 0x00000000}, new float[]{0f, 0.32f, 0.68f, 1f}, Shader.TileMode.CLAMP);
+            // И плавное растворение книзу — строго до нуля у нижней кромки
+            Shader fadeOut = new LinearGradient(0, b.top, 0, bot,
+                    new int[]{0xFFFFFFFF, 0xFFFFFFFF, 0xA0FFFFFF, 0x28FFFFFF, 0x00FFFFFF},
+                    new float[]{0f, 0.30f, 0.62f, 0.86f, 1f}, Shader.TileMode.CLAMP);
+            paint.setShader(new android.graphics.ComposeShader(side, fadeOut, android.graphics.PorterDuff.Mode.DST_IN));
             canvas.drawPath(p, paint);
             paint.setShader(null);
-            paint.setMaskFilter(null);
         }
 
         @Override
@@ -1123,17 +986,8 @@ public class MainActivity extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         rootView = root;
-
-        // Фон живёт отдельным слоем под интерфейсом. Так его движение перерисовывает
-        // только сам фон, а не весь экран: именно из-за общей перерисовки движение
-        // и выглядело рывками, часто менять кадры было слишком дорого.
-        android.widget.FrameLayout stage = new android.widget.FrameLayout(this);
-        View bgLayer = new View(this);
-        bgLayer.setBackgroundDrawable(bg = new BgDrawable());
-        stage.addView(bgLayer, new android.widget.FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        stage.addView(root, new android.widget.FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        // Фон: градиент + очень бледная векторная графика (дуги, точки) — читаемость не страдает.
+        root.setBackgroundDrawable(bg = new BgDrawable());
 
         LinearLayout header = new LinearLayout(this);
         header.setOrientation(LinearLayout.HORIZONTAL);
@@ -1367,7 +1221,7 @@ public class MainActivity extends Activity {
         gridView = grid;
         root.addView(grid, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
-        setContentView(stage);
+        setContentView(root);
         // Следим за установкой и удалением приложений: только тогда и пересобираем список.
         IntentFilter pkgFilter = new IntentFilter();
         pkgFilter.addAction(Intent.ACTION_PACKAGE_ADDED);
@@ -1418,10 +1272,8 @@ public class MainActivity extends Activity {
         ensureFocus();
         handler.removeCallbacks(ticker);
         handler.postDelayed(ticker, 60000);
-        if (bgView != null) {
-            bgView.removeCallbacks(bgTick);
-            bgView.postOnAnimation(bgTick);   // аврора живёт только пока экран наш
-        }
+        handler.removeCallbacks(bgTick);
+        handler.postDelayed(bgTick, 250);   // аврора живёт только пока экран наш
     }
 
     @Override
