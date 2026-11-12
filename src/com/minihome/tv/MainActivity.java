@@ -648,7 +648,7 @@ public class MainActivity extends Activity {
         // Сколько шагов проявляется следующий кадр. Шаг идёт раз в кадр экрана (16,7 мс),
         // поэтому 12 шагов — мягкое проявление за 0,2 с. При 4 шагах (по 25% за раз) смена
         // кадра читается глазом как рывок, даже если самих кадров много.
-        private static final int STEPS = 16;
+        private static final int STEPS = 50;
 
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         private android.graphics.Bitmap[] frames;
@@ -682,8 +682,10 @@ public class MainActivity extends Activity {
                 canvas.drawBitmap(cur, null, b, paint);   // перехода нет — просто копия кадра
                 return;
             }
-            // Новый кадр кладём снизу, а старый уходит, растворяясь: гасим его прозрачностью.
-            // Когда старый станет полностью прозрачным, от него ничего не остаётся — цикл идёт дальше.
+            // Новый кадр ложится непрозрачной основой, а старый поверх него растворяется.
+            // Гасить оба сразу нельзя: на непрозрачном фоне это даёт провал яркости в середине
+            // перехода (до 25% темноты) — то самое мигание. При таком порядке новый кадр
+            // проступает всё чётче по мере ухода старого, то есть появляется плавно.
             canvas.drawBitmap(nxt, null, b, paint);              // новый кадр — основа
             paint.setAlpha((int) (255 * (1f - blend)));
             canvas.drawBitmap(cur, null, b, paint);              // старый растворяется и исчезает
