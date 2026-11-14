@@ -135,7 +135,7 @@ public class MainActivity extends Activity {
     private boolean menuShown;
     private static final long LONG_PRESS_MS = 650L;
 
-    /** Насколько плитка крупнее в выделении: 1.08 — на 8 процентов. */
+    /** Насколько плитка крупнее в выделении: 1.08 — на 8 процентов, без анимации. */
     private static final float FOCUS_SCALE = 1.08f;
     /** Режим управления: кнопка «Изменить» показывает в сетке удаление, скрытие и возврат приложений. */
     private boolean editMode;
@@ -1594,11 +1594,10 @@ public class MainActivity extends Activity {
                     view.setElevation(has ? dp(6) : 0f);
                 }
                 // В выделении плитка чуть крупнее; сняли выделение — прежний размер.
-                view.animate()
-                        .scaleX(has ? FOCUS_SCALE : 1f)
-                        .scaleY(has ? FOCUS_SCALE : 1f)
-                        .setDuration(has ? 140L : 110L)
-                        .start();
+                // Без анимации: владелец просил на плитках полностью без анимаций.
+                float k = has ? FOCUS_SCALE : 1f;
+                view.setScaleX(k);
+                view.setScaleY(k);
             }
         });
     }
