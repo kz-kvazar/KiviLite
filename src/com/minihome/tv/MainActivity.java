@@ -134,6 +134,9 @@ public class MainActivity extends Activity {
     private Runnable pendingLong;
     private boolean menuShown;
     private static final long LONG_PRESS_MS = 650L;
+
+    /** Насколько плитка крупнее в выделении: 1.08 — на 8 процентов. */
+    private static final float FOCUS_SCALE = 1.08f;
     /** Режим управления: кнопка «Изменить» показывает в сетке удаление, скрытие и возврат приложений. */
     private boolean editMode;
     private TextView editButton;
@@ -1590,6 +1593,12 @@ public class MainActivity extends Activity {
                 if (android.os.Build.VERSION.SDK_INT >= 21) {
                     view.setElevation(has ? dp(6) : 0f);
                 }
+                // В выделении плитка чуть крупнее; сняли выделение — прежний размер.
+                view.animate()
+                        .scaleX(has ? FOCUS_SCALE : 1f)
+                        .scaleY(has ? FOCUS_SCALE : 1f)
+                        .setDuration(has ? 140L : 110L)
+                        .start();
             }
         });
     }
