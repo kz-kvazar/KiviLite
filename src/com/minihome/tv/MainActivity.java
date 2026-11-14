@@ -137,6 +137,11 @@ public class MainActivity extends Activity {
 
     /** Насколько плитка крупнее в выделении: 1.08 — на 8 процентов, без анимации. */
     private static final float FOCUS_SCALE = 1.08f;
+    /**
+     * Увеличение карточки приложения в выделении. Меньше, чем у плиток: карточки в сетке
+     * стоят плотно (зазор 28 px), и на 8 % соседние почти сомкнулись бы.
+     */
+    private static final float GRID_FOCUS_SCALE = 1.06f;
     /** Режим управления: кнопка «Изменить» показывает в сетке удаление, скрытие и возврат приложений. */
     private boolean editMode;
     private TextView editButton;
@@ -1858,6 +1863,11 @@ public class MainActivity extends Activity {
             public void onFocusChange(View view, boolean has) {
                 if (has) lastWasGrid = false;
                 if (android.os.Build.VERSION.SDK_INT >= 21) view.setElevation(has ? dp(6) : 0f);
+                // В выделении карточка чуть крупнее; сняли выделение — прежний размер.
+                // Без анимации: владелец просил полностью без анимаций.
+                float k = has ? GRID_FOCUS_SCALE : 1f;
+                view.setScaleX(k);
+                view.setScaleY(k);
             }
         };
         /** Пульт: MENU — действия для приложения; ОК, удержанное дольше LONG_PRESS_MS, — тоже меню. */
@@ -1916,6 +1926,7 @@ public class MainActivity extends Activity {
                 ll.setOnLongClickListener(longClick);
                 ll.setOnKeyListener(key);
                 ll.setOnFocusChangeListener(focus);
+                ll.setPivotY(0f);          // растёт вниз: вверх перекрыла бы надпись «Застосунки»
                 if (android.os.Build.VERSION.SDK_INT >= 21) {
                     ll.setOutlineProvider(new android.view.ViewOutlineProvider() {
                         @Override
@@ -1947,6 +1958,10 @@ public class MainActivity extends Activity {
             }
 
             h.position = position;
+            // Переиспользованная ячейка могла остаться увеличенной — приводим размер к её фокусу.
+            float k = h.box.isFocused() ? GRID_FOCUS_SCALE : 1f;
+            h.box.setScaleX(k);
+            h.box.setScaleY(k);
             ResolveInfo ri = apps.get(position);
             String pkg = ri.activityInfo.packageName;
             // Название и значок читаем только при смене приложения в этой ячейке.
