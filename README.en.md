@@ -3,7 +3,7 @@
 [Русский](README.md) · [English](README.en.md) · [Українська](README.uk.md)
 
 A lightweight replacement for the vendor shell on cheap Android TV boxes and TVs
-(MStar / Kivi / Funshion, Android 5–7). Built and verified on an **LG 43UK32G**
+(MStar / Kivi / Funshion, Android 5–7). Built and verified on an **KIVI 43UK32G**
 (MStar, Android 6.0.1, API 23, 1920×1080, density 320).
 
 **Version 1.7.** The launcher is stable and verified on real hardware. Latest changes:
