@@ -3,7 +3,7 @@
 [Русский](README.md) · [English](README.en.md) · [Українська](README.uk.md)
 
 Легка заміна вендорської оболонки на китайських Android-ТВ і ТВ-приставках
-(MStar / Kivi / Funshion, Android 5–7). Зібраний і перевірений на **LG 43UK32G**
+(MStar / Kivi / Funshion, Android 5–7). Зібраний і перевірений на **KIVI 43UK32G**
 (MStar, Android 6.0.1, API 23, 1920×1080, density 320).
 
 **Версія 1.7.** Лаунчер стабільний і перевірений на залізі. Останні зміни: 1.7 (кнопка
