@@ -3,7 +3,7 @@
 [Русский](README.md) · [English](README.en.md) · [Українська](README.uk.md)
 
 Лёгкая замена вендорской оболочки на китайских Android-ТВ и ТВ-приставках
-(MStar / Kivi / Funshion, Android 5–7). Собран и проверен на **LG 43UK32G**
+(MStar / Kivi / Funshion, Android 5–7). Собран и проверен на **KIVI 43UK32G**
 (MStar, Android 6.0.1, API 23, 1920×1080, density 320).
 
 **Версия 1.7.** Лаунчер стабилен и проверен на железе. Последние изменения: 1.7 (кнопка
