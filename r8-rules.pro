@@ -5,7 +5,6 @@
 # Точки входа: манифест ссылается на них по именам, поэтому сохраняем классы целиком.
 -keep public class com.minihome.tv.MainActivity { *; }
 -keep public class com.minihome.tv.PicturePanelActivity { *; }
--keep public class com.minihome.tv.ApiProbeActivity { *; }
 -keep public class com.minihome.tv.SourceKeyService { *; }
 
 # Вендорский API дёргается по строкам через Class.forName — статических ссылок нет,
@@ -22,5 +21,4 @@
 # поэтому переименование безопасно.
 -allowaccessmodification
 -repackageclasses ''
--optimizationpasses 5
 -adaptclassstrings
