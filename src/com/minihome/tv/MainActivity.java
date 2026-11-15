@@ -73,8 +73,6 @@ public class MainActivity extends Activity {
         {"tv.fun.settings", "tv.fun.settings.picaudio.PicAudioSettingsActivity", "E8785A", "Картинка", "Зображення", "Picture"},
         {"tv.fun.filemanager", "tv.fun.filemanager.FunFileManagerActivity", "B39BEA", "Файлы", "Файли", "Files"}
     };
-
-    private static final String[] S_TITLE = {"Телевизор", "Телевізор", "Television"};
     private static final String[] S_APPS = {"Приложения", "Застосунки", "Apps"};
     private static final String[] S_EDIT = {"Изменить", "Змінити", "Edit"};
     private static final String[] S_DONE = {"Готово", "Готово", "Done"};
@@ -101,11 +99,8 @@ public class MainActivity extends Activity {
     private static final int CARD = 0xFF1E2733;
     private static final int CARD_BORDER = 0x33FFFFFF;
     private static final int CARD_FOCUS = 0xFF4FD08A;   // как зелёный провод у значка сети
-    private static final int CARD_FOCUS_EDGE = 0xFFDCE9F7;   // и светлая кромка, как корпус коннектора
     private static final int TEXT_MAIN = 0xFFF1F5FA;
     private static final int TEXT_DIM = 0xFF97A7B8;
-    private static final int TEXT_OK = 0xFF7ED07A;
-
     private static final String PREFS = "minihome";
     private static final String KEY_HIDDEN = "hidden";
 
@@ -122,6 +117,7 @@ public class MainActivity extends Activity {
         public void run() {
             if (bg == null) return;
             tick++;
+            bg.stepParticles(0.066f);              // осадки двигаются в этом же кадре — лишних перерисовок нет
             if (tick % 4 == 0) bg.nextFrame();    // смена кадра раз в 265 мс
             else bg.fadeStep();                    // в промежутке — плавное проявление и затухание
             handler.postDelayed(this, 66);         // 15 обновлений/с: нагрузка пропорциональна им
@@ -153,13 +149,27 @@ public class MainActivity extends Activity {
     // --- Погода в шапке: значок + температура. Обновляем не чаще раза в час. ---
     private static final String W_PREFS = "weather";
     private static final long WEATHER_TTL_MS = 3600000L;
+    /**
+     * Что показываем на фоне по погоде: 0 — как обычно (пасмурно, туман),
+     * 1 — солнце (больше жёлтого), 2 — дождь (капли), 3 — снег (снежинки).
+     */
+    private static final int WX_PLAIN = 0, WX_SUN = 1, WX_RAIN = 2, WX_SNOW = 3;
+    /** Снег на экране идёт ВСЕГДА с 24 декабря по 14 января, какой бы ни была погода. */
+    private static final int SNOW_FROM_MONTH = 11, SNOW_FROM_DAY = 24;   // месяцы с нуля
+    private static final int SNOW_TO_MONTH = 0, SNOW_TO_DAY = 14;
     private TextView weatherView;
     private WeatherIcon weatherIcon;
     private boolean weatherBusy;
+    /** Последний код погоды от сервиса: по нему выбирается эффект на фоне. */
+    private int weatherCode = -1;
+    /** Текущий эффект фона (WX_*). */
+    private int weatherEffect = WX_PLAIN;
 
     // --- Курсы валют в шапке: обновляем редко (раз в 3-4 часа), значения округляем до копеек. ---
     private static final String R_PREFS = "rates";
     private static final long RATES_TTL_MS = 12600000L;      // 3,5 часа
+    /** Запрос из панели Kivi (кнопка «Обновить»): тянем погоду и курсы заново, не глядя на срок годности. */
+    public static final String ACTION_REFRESH = "com.minihome.tv.action.REFRESH";
     private final TextView[] rateViews = new TextView[4];
     private final CoinIcon[] rateIcons = new CoinIcon[4];
     private boolean ratesBusy;
@@ -182,8 +192,8 @@ public class MainActivity extends Activity {
             tickCount++;
             if ((tickCount % 2) == 0) updateNetwork();          // раз в 2 минуты
             if ((tickCount % 30) == 0) {                        // раз в полчаса
-                refreshWeatherIfStale();                        // методы сами смотрят срок годности данных
-                refreshRatesIfStale();
+                refreshWeather(false);                        // методы сами смотрят срок годности данных
+                refreshRates(false);
             }
             handler.postDelayed(this, 60000);                    // раз в минуту: чаще незачем
         }
@@ -265,17 +275,6 @@ public class MainActivity extends Activity {
         s.addState(new int[]{}, rounded(CARD, hidden ? ACCENT_OK : ACCENT_EDIT, 3));
         return s;
     }
-
-    private ColorStateList tileText() {
-        return new ColorStateList(
-                new int[][]{
-                        new int[]{android.R.attr.state_focused},
-                        new int[]{android.R.attr.state_pressed},
-                        new int[]{android.R.attr.state_selected},
-                        new int[]{}},
-                new int[]{Color.WHITE, Color.WHITE, Color.WHITE, TEXT_MAIN});
-    }
-
     /**
      * Значок состояния сети, нарисованный кодом: RJ45 — провод, дуги — Wi-Fi, перечёркнутый круг — офлайн.
      */
@@ -285,11 +284,11 @@ public class MainActivity extends Activity {
      * Сразу показывает погоду из памяти, а в сеть идёт ТОЛЬКО если данные старше часа.
      * Никаких служб, будильников и опроса в фоне: один короткий запрос при выходе на главный экран.
      */
-    private void refreshWeatherIfStale() {
+    private void refreshWeather(boolean force) {
         final SharedPreferences p = getSharedPreferences(W_PREFS, MODE_PRIVATE);
         showWeather(p.getString("city", null), p.getInt("temp", 999), p.getInt("code", -1));
         long age = System.currentTimeMillis() - p.getLong("ts", 0L);
-        if (age < WEATHER_TTL_MS || weatherBusy || !isOnline()) return;
+        if (!force && age < WEATHER_TTL_MS || weatherBusy || !isOnline()) return;
         weatherBusy = true;
         new Thread(new Runnable() {
             public void run() {
@@ -330,6 +329,8 @@ public class MainActivity extends Activity {
     }
 
     private void showWeather(String city, int temp, int code) {
+        weatherCode = code;
+        applyWeatherEffect();                 // сезон снега не зависит от данных погоды
         if (weatherView == null || weatherIcon == null) return;
         if (temp == 999) {
             weatherView.setText("");
@@ -339,6 +340,33 @@ public class MainActivity extends Activity {
         // Город не показываем: только температура — крупно и ярко.
         weatherView.setText((temp > 0 ? "+" : "") + temp + "\u00B0");
         weatherIcon.setCode(code);
+    }
+
+    /**
+     * Эффект фона по коду погоды open-meteo. Туман приравнен к пасмурному, гроза — к дождю.
+     * Солнце — 0..2, пасмурно — 3, туман — 45 и 48, дождь — 51..67 и 80..82, снег — 71..77 и 85..86.
+     */
+    private static int effectFor(int code) {
+        if (inSnowSeason()) return WX_SNOW;                     // 24 декабря — 14 января: всегда снег
+        if (code >= 0 && code <= 2) return WX_SUN;
+        if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82) || code >= 95) return WX_RAIN;
+        if ((code >= 71 && code <= 77) || (code >= 85 && code <= 86)) return WX_SNOW;
+        return WX_PLAIN;                                        // пасмурно, туман и всё остальное
+    }
+
+    /** Идёт ли снег по календарю: с 24 декабря по 14 января. */
+    private static boolean inSnowSeason() {
+        java.util.Calendar c = java.util.Calendar.getInstance();
+        int m = c.get(java.util.Calendar.MONTH), d = c.get(java.util.Calendar.DAY_OF_MONTH);
+        return (m == SNOW_FROM_MONTH && d >= SNOW_FROM_DAY) || (m == SNOW_TO_MONTH && d <= SNOW_TO_DAY);
+    }
+
+    /** Пересчитывает эффект фона и трогает экран только когда он действительно сменился. */
+    private void applyWeatherEffect() {
+        int eff = effectFor(weatherCode);
+        if (eff == weatherEffect) return;
+        weatherEffect = eff;
+        if (bg != null) bg.setEffect(eff);
     }
 
     private boolean isOnline() {
@@ -605,12 +633,12 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void refreshRatesIfStale() {
+    private void refreshRates(boolean force) {
         final SharedPreferences p = getSharedPreferences(R_PREFS, MODE_PRIVATE);
         showRates(p.getString("uah", null), p.getString("eur", null), p.getString("btc", null),
                 p.getString("eth", null));
         long age = System.currentTimeMillis() - p.getLong("ts", 0L);
-        if (age < RATES_TTL_MS || ratesBusy || !isOnline()) return;
+        if (!force && age < RATES_TTL_MS || ratesBusy || !isOnline()) return;
         ratesBusy = true;
         new Thread(new Runnable() {
             public void run() {
@@ -666,6 +694,27 @@ public class MainActivity extends Activity {
         private int prevIdx;
         private float blend = 1f;
 
+        /** Что рисуем поверх сияния: 0 — ничего, 1 — солнце, 2 — капли дождя, 3 — снежинки. */
+        private int effect = WX_PLAIN;
+        /** Краска погодного слоя — отдельная, чтобы не сбивать прозрачность кадров. */
+        private final Paint wxPaint = new Paint(Paint.DITHER_FLAG);   // без сглаживания: с ним
+        // GPU разбирает каждую снежинку на треугольники заново — замер показал до +6 % процессора
+        private android.graphics.Shader sunWash, sunGlow;
+        private int sunW, sunH;
+        // Частицы осадков: снежинки кружат и падают медленно, капли дождя летят штрихами.
+        private static final int PARTICLES = 100;
+        /** Прозрачность частиц — тремя группами, а не каждой своей: смена краски на каждую
+         *  снежинку заметно грузила отрисовку (замер: снег стоил +5 % процессора). */
+        private final int[] snowAlpha = {235, 185, 135};
+        private final int[] rainAlpha = {175, 135, 95};
+        private final float[] px = new float[PARTICLES], py = new float[PARTICLES];
+        private final float[] pv = new float[PARTICLES], psz = new float[PARTICLES];
+        private final float[] pdrift = new float[PARTICLES], pfreq = new float[PARTICLES];
+        private boolean seeded;
+        private int seedW, seedH;
+        private float ptime;
+        private final java.util.Random rnd = new java.util.Random();
+
         @Override
         public void draw(Canvas canvas) {
             Rect b = getBounds();
@@ -675,19 +724,22 @@ public class MainActivity extends Activity {
             android.graphics.Bitmap shown = frames == null ? null : frames[frameIdx];
             if (shown == null) {
                 paintBackground(canvas, b, 0f);
-                return;
+            } else {
+                android.graphics.Bitmap prev = frames[prevIdx];
+                if (prev != null && prev != shown && blend < 1f) {
+                    // Новый кадр — основа, старый поверх него гаснет: у старого прозрачность растёт,
+                    // у нового падает. Поэтому смена картинки идёт мягко, а не подменой кадра.
+                    canvas.drawBitmap(shown, null, b, paint);
+                    paint.setAlpha((int) (255 * (1f - blend)));
+                    canvas.drawBitmap(prev, null, b, paint);
+                    paint.setAlpha(255);
+                } else {
+                    canvas.drawBitmap(shown, null, b, paint);
+                }
             }
-            android.graphics.Bitmap prev = frames[prevIdx];
-            if (prev != null && prev != shown && blend < 1f) {
-                // Новый кадр — основа, старый поверх него гаснет: у старого прозрачность растёт,
-                // у нового падает. Поэтому смена картинки идёт мягко, а не подменой кадра.
-                canvas.drawBitmap(shown, null, b, paint);
-                paint.setAlpha((int) (255 * (1f - blend)));
-                canvas.drawBitmap(prev, null, b, paint);
-                paint.setAlpha(255);
-                return;
-            }
-            canvas.drawBitmap(shown, null, b, paint);
+            // Погодный слой идёт поверх кадра и двигается вместе с ним, extra-перерисовок не требует.
+            if (effect == WX_SUN) drawSun(canvas, b);
+            else if (effect == WX_SNOW || effect == WX_RAIN) drawParticles(canvas, b);
         }
 
         /**
@@ -801,16 +853,6 @@ public class MainActivity extends Activity {
          * Занавесь сияния: волнистая вертикальная полоса.
          * Края мягкие по бокам, а книзу полоса растворяется — резкой границы нет.
          */
-        /** Смешивание двух цветов: r,g,b и прозрачность — для густого градиента без ступенек. */
-        private int mixColor(int c1, int c2, float k) {
-            int a1 = (c1 >>> 24), a2 = (c2 >>> 24);
-            int r = (int) (((c1 >> 16) & 255) * (1 - k) + ((c2 >> 16) & 255) * k);
-            int g = (int) (((c1 >> 8) & 255) * (1 - k) + ((c2 >> 8) & 255) * k);
-            int bl = (int) ((c1 & 255) * (1 - k) + (c2 & 255) * k);
-            int al = (int) (a1 * (1 - k) + a2 * k);
-            return (al << 24) | (r << 16) | (g << 8) | bl;
-        }
-
         private void curtain(Canvas canvas, Rect b, float cxF, float hwF, float botF,
                              int color, int alpha, float phase, int idx) {
             float w = b.width(), h = b.height();
@@ -866,6 +908,108 @@ public class MainActivity extends Activity {
         public int getOpacity() {
             return android.graphics.PixelFormat.OPAQUE;
         }
+
+        /** Смена погодного эффекта: частицы рассыпаем заново, экран перерисовываем сразу. */
+        void setEffect(int e) {
+            if (e == effect) return;
+            effect = e;
+            seeded = false;
+            ptime = 0f;
+            sunWash = null;
+            seedParticles();
+            invalidateSelf();
+        }
+
+        /** Солнце: на аврору добавляем жёлтого — тёплое свечение у верха и жёлтая пелена по экрану. */
+        private void drawSun(Canvas canvas, Rect b) {
+            if (sunWash == null || sunW != b.width() || sunH != b.height()) {
+                sunW = b.width();
+                sunH = b.height();
+                sunWash = new LinearGradient(0, b.top, 0, b.bottom,
+                        new int[]{0x44FFC24D, 0x26FFB733, 0x0EFF9E2E, 0x00000000},
+                        new float[]{0f, 0.34f, 0.72f, 1f}, Shader.TileMode.CLAMP);
+                sunGlow = new RadialGradient(b.width() * 0.5f, b.top + b.height() * 0.10f,
+                        b.height() * 0.55f,
+                        new int[]{0x4CFFE08A, 0x18FFC24D, 0x00000000}, new float[]{0f, 0.45f, 1f},
+                        Shader.TileMode.CLAMP);
+            }
+            wxPaint.setStyle(Paint.Style.FILL);
+            wxPaint.setShader(sunWash);
+            canvas.drawRect(b, wxPaint);
+            wxPaint.setShader(sunGlow);
+            canvas.drawRect(b, wxPaint);
+            wxPaint.setShader(null);
+        }
+
+        /** Раскладываем частицы по экрану. Размер берём из границ: до разметки он пуст. */
+        private void seedParticles() {
+            Rect b = getBounds();
+            int w = b.width(), h = b.height();
+            if (w <= 1 || h <= 1) return;                  // разметка ещё не прошла — разложим при первой отрисовке
+            seedW = w;
+            seedH = h;
+            seeded = true;
+            boolean snow = effect == WX_SNOW;
+            for (int i = 0; i < PARTICLES; i++) {
+                px[i] = rnd.nextFloat() * w;
+                py[i] = -rnd.nextFloat() * h * 1.25f;      // часть уже в пути, часть входит сверху
+                if (snow) {
+                    psz[i] = 2.2f + rnd.nextFloat() * 3.4f;              // снежинка
+                    pv[i] = 34f + rnd.nextFloat() * 46f;                 // падает медленно
+                    pdrift[i] = 10f + rnd.nextFloat() * 18f;             // и кружит
+                    pfreq[i] = 0.5f + rnd.nextFloat() * 0.9f;
+                } else {
+                    psz[i] = 26f + rnd.nextFloat() * 22f;                // штрих капли
+                    pv[i] = 300f + rnd.nextFloat() * 230f;               // летит быстро
+                    pdrift[i] = 0f;
+                    pfreq[i] = 0f;
+                }
+            }
+        }
+
+        /** Шаг осадков. Зовётся из кадрового таймера: своей перерисовки не заводит. */
+        void stepParticles(float dt) {
+            if (effect != WX_SNOW && effect != WX_RAIN) return;
+            if (!seeded || seedW != getBounds().width() || seedH != getBounds().height()) seedParticles();
+            if (!seeded) return;
+            ptime += dt;
+            float w = seedW, h = seedH;
+            for (int i = 0; i < PARTICLES; i++) {
+                py[i] += pv[i] * dt;
+                if (effect == WX_SNOW) px[i] += (float) Math.sin(ptime * pfreq[i] + i * 0.7f) * pdrift[i] * dt;
+                else px[i] -= pv[i] * 0.20f * dt;                       // дождь идёт под наклоном
+                if (py[i] - psz[i] > h) {                               // ушла за низ — входит сверху заново
+                    py[i] = -psz[i] - rnd.nextFloat() * h * 0.3f;
+                    px[i] = rnd.nextFloat() * w;
+                }
+                if (px[i] < -80f) px[i] = w + 60f;
+                else if (px[i] > w + 80f) px[i] = -60f;
+            }
+            invalidateSelf();
+        }
+
+        /** Рисуем осадки: снежинки — кружки, капли — короткие наклонные штрихи. */
+        private void drawParticles(Canvas canvas, Rect b) {
+            if (!seeded || seedW != b.width() || seedH != b.height()) return;
+            // Краску меняем три раза за кадр — по группам (остаток от деления номера на 3),
+            // поэтому частиц много, а состояние краски почти не дёргается.
+            if (effect == WX_SNOW) {
+                wxPaint.setStyle(Paint.Style.FILL);
+                for (int g = 0; g < 3; g++) {
+                    wxPaint.setColor((snowAlpha[g] << 24) | 0x00E8F3FF);
+                    for (int i = g; i < PARTICLES; i += 3)
+                        canvas.drawRect(px[i], py[i], px[i] + psz[i], py[i] + psz[i], wxPaint);   // снежинка-точка
+                }
+            } else {
+                wxPaint.setStyle(Paint.Style.STROKE);
+                wxPaint.setStrokeWidth(2f);
+                for (int g = 0; g < 3; g++) {
+                    wxPaint.setColor((rainAlpha[g] << 24) | 0x00CFE6F7);
+                    for (int i = g; i < PARTICLES; i += 3)
+                        canvas.drawLine(px[i], py[i], px[i] + psz[i] * 0.20f, py[i] - psz[i], wxPaint);   // хвост ПО ходу: капли летят влево (px -=), значит хвост вправо
+                }
+            }
+        }
     }
 
     /** Значок погоды: рисуется кодом, яркими цветами — видно с дивана. */
@@ -876,6 +1020,9 @@ public class MainActivity extends Activity {
         WeatherIcon(Context c) {
             super(c);
             paint.setStrokeCap(Paint.Cap.ROUND);
+            // Обводка: на жёлтом свечении жёлтое солнце сливается с фоном.
+            setLayerType(LAYER_TYPE_SOFTWARE, null);              // тени фигур рисуются только программно
+            paint.setShadowLayer(dp(2.5f), 0, 0, 0xE6000000);
         }
 
         void setCode(int c) {
@@ -889,6 +1036,7 @@ public class MainActivity extends Activity {
         protected void onDraw(Canvas canvas) {
             if (code < 0) return;
             float w = getWidth(), h = getHeight();
+            canvas.scale(0.84f, 0.84f, w * 0.5f, h * 0.5f);        // место под обводку, иначе её срежет край вида
             float m = Math.min(w, h);
             boolean sun = code == 0 || code == 1 || code == 2;
             boolean rain = (code >= 51 && code <= 67) || (code >= 80 && code <= 82);
@@ -964,6 +1112,8 @@ public class MainActivity extends Activity {
 
         NetIcon(Context c) {
             super(c);
+            // Обводка: значок сети всегда поверх яркого фона.
+            setLayerType(LAYER_TYPE_SOFTWARE, null);
         }
 
         void set(int k) {
@@ -978,6 +1128,8 @@ public class MainActivity extends Activity {
             Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
             p.setStrokeCap(Paint.Cap.ROUND);
             p.setStrokeJoin(Paint.Join.ROUND);
+            p.setShadowLayer(dp(2.5f), 0, 0, 0xE6000000);          // тёмная обводка значка сети
+            cv.scale(0.86f, 0.86f, w * 0.5f, h * 0.5f);            // место под обводку по краям
 
             if (kind == 2) {
                 // Сетевой кабель: витая пара с наконечником — крупно и ярко.
@@ -1070,6 +1222,7 @@ public class MainActivity extends Activity {
             rv.setTextColor(TEXT_MAIN);
             rv.setTextSize(16f);
             rv.setTypeface(Typeface.DEFAULT_BOLD);
+            rv.setShadowLayer(dp(3f), 0, 0, 0xE6000000);           // обводка верхнего ряда: цифры читаются и на светлом
             LinearLayout.LayoutParams rvp = new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             rvp.setMargins(dp(6), 0, 0, 0);
@@ -1113,6 +1266,7 @@ public class MainActivity extends Activity {
         weatherView.setTextColor(TEXT_MAIN);
         weatherView.setTextSize(30f);
         weatherView.setTypeface(Typeface.DEFAULT_BOLD);
+        weatherView.setShadowLayer(dp(3f), 0, 0, 0xE6000000);
         LinearLayout.LayoutParams wlp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         wlp.setMargins(dp(10), 0, 0, 0);
@@ -1133,12 +1287,14 @@ public class MainActivity extends Activity {
         clockView.setTextColor(TEXT_MAIN);
         clockView.setTextSize(54f);
         clockView.setTypeface(Typeface.DEFAULT_BOLD);
+        clockView.setShadowLayer(dp(3f), 0, 0, 0xE6000000);
         clockView.setGravity(Gravity.RIGHT);
         timeCol.addView(clockView);
 
         dateView = new TextView(this);
         dateView.setTextColor(0xFFDCE9F7);
         dateView.setTextSize(20f);
+        dateView.setShadowLayer(dp(3f), 0, 0, 0xE6000000);
         dateView.setGravity(Gravity.RIGHT);
         timeCol.addView(dateView);
         clockBox.addView(timeCol);
@@ -1314,14 +1470,24 @@ public class MainActivity extends Activity {
         }
     }
 
+    /** Внешний запуск с ACTION_REFRESH: экран не трогаем, только обновляем данные. */
+    @Override
+    protected void onNewIntent(Intent it) {
+        super.onNewIntent(it);
+        setIntent(it);                   // прочитается в onResume
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
+        // Запрос из панели Kivi: данные берём заново, один раз — дальше снова действует срок годности.
+        boolean force = ACTION_REFRESH.equals(getIntent() == null ? "" : getIntent().getAction());
+        if (force) setIntent(new Intent());
         if (appsDirty) loadApps();       // перебор приложений только при изменениях
         updateClock();
         updateNetwork();
-        refreshWeatherIfStale();
-        refreshRatesIfStale();
+        refreshWeather(force);
+        refreshRates(force);
         ensureFocus();
         handler.removeCallbacks(ticker);
         handler.postDelayed(ticker, 60000);
@@ -1554,15 +1720,6 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * Размер подписи плитки верхнего ряда. Плиток стало шесть — при прежнем
-     * размере (19) длинные подписи вроде «Налаштування» обрезались бы,
-     * поэтому при шести и более плитках подпись чуть меньше.
-     */
-    private float tileTextSize() {
-        return TILES.length > 5 ? 17f : 19f;
-    }
-
-    /**
      * Кнопка «Назад» на главном экране НЕ закрывает лаунчер.
      * Иначе система показывает приложение, из которого только что вышли
      * (это и было замечено: после выхода на лаунчер «Назад» возвращал в приложение).
@@ -1721,26 +1878,6 @@ public class MainActivity extends Activity {
 
     private void showError(String s) {
         Toast.makeText(this, "Не удалось открыть: " + s, Toast.LENGTH_LONG).show();
-    }
-
-    /**
-     * Система гасит нашу службу перехвата кнопки SOURCE при каждом обновлении приложения,
-     * из-за чего кнопка «немеет» до перезагрузки. Возвращаем её сами при выходе на главный экран.
-     */
-    private void ensureSourceKeyEnabled() {
-        try {
-            String me = getPackageName() + "/" + SourceKeyService.class.getName();
-            String cur = android.provider.Settings.Secure.getString(getContentResolver(),
-                    android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-            if (cur != null && cur.contains(SourceKeyService.class.getName())) return;
-            android.provider.Settings.Secure.putString(getContentResolver(),
-                    android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
-                    (cur == null || cur.length() == 0) ? me : cur + ":" + me);
-            android.provider.Settings.Secure.putInt(getContentResolver(),
-                    android.provider.Settings.Secure.ACCESSIBILITY_ENABLED, 1);
-        } catch (Throwable ignored) {
-            // прав нет — тогда выручает включение в автозапуске при загрузке
-        }
     }
 
     /**

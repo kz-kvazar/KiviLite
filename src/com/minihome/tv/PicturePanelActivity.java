@@ -7,7 +7,6 @@ import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.net.Uri;
 import android.graphics.Canvas;
-import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.drawable.GradientDrawable;
@@ -21,7 +20,6 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import java.io.FileOutputStream;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -58,7 +56,6 @@ public class PicturePanelActivity extends Activity {
     private static PicturePanelActivity instance;
 
     private Object pm;              // PictureManager
-    private int backMin = 0, backMax = 100;
     private int srcType = 1, modeType = 0;      // текущий источник и режим изображения (строка в базе)
     private long lastApply = 0L;
     private final StringBuilder log = new StringBuilder();

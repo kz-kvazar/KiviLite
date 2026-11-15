@@ -73,32 +73,6 @@ public class ApiProbeActivity extends Activity {
             sb.append("ошибка: ").append(t).append("\n");
         }
     }
-
-    private void dumpInstance() {
-        sb.append("\n--- живой экземпляр ---\n");
-        try {
-            Class<?> tm = Class.forName("com.mstar.android.tvapi.common.TvManager");
-            Object t = tm.getMethod("getInstance").invoke(null);
-            sb.append("TvManager.getInstance() = ").append(t).append("\n");
-            Object pm = tm.getMethod("getPictureManager").invoke(t);
-            sb.append("getPictureManager() = ").append(pm == null ? "null" : pm.getClass().getName()).append("\n");
-            if (pm != null) {
-                for (String g : new String[]{"getBrightness", "getContrast", "getBacklight",
-                        "getSaturation", "getSharpness", "getPictureMode", "getColorTemprature"}) {
-                    try {
-                        Object v = pm.getClass().getMethod(g).invoke(pm);
-                        sb.append("  ").append(g).append(" = ").append(v).append("\n");
-                    } catch (Throwable t2) {
-                        sb.append("  ").append(g).append(" -> ").append(t2.getClass().getSimpleName())
-                                .append(' ').append(t2.getMessage()).append("\n");
-                    }
-                }
-            }
-        } catch (Throwable t) {
-            sb.append("ошибка: ").append(t).append("\n");
-        }
-    }
-
     private Object pictureManager() {
         try {
             Class<?> tm = Class.forName("com.mstar.android.tvapi.common.TvManager");
@@ -213,17 +187,6 @@ public class ApiProbeActivity extends Activity {
             sb.append("яркость возвращена на ").append(back).append("\n");
         } catch (Throwable t) {
             sb.append("возврат яркости -> ").append(t).append("\n");
-        }
-    }
-
-    private void dumpServiceManager() {
-        sb.append("\n--- служба TvPictureManager через ServiceManager ---\n");
-        try {
-            Class<?> sm = Class.forName("android.os.ServiceManager");
-            Object binder = sm.getMethod("getService", String.class).invoke(null, "TvPictureManager");
-            sb.append("binder = ").append(binder).append("\n");
-        } catch (Throwable t) {
-            sb.append("ошибка: ").append(t).append("\n");
         }
     }
 }

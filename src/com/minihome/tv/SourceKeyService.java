@@ -59,40 +59,6 @@ public class SourceKeyService extends AccessibilityService {
         }
     }
 
-    /**
-     * Открывает вендорский экран изображения и нажимает в нём верхний пункт
-     * «Параметры изображения» — именно он показывает нужное всплывающее окно.
-     * Окно самого пункта не экспортируется, поэтому нажать его можно только через службу доступности.
-     */
-    private void openPicturePopup() {
-        Intent i = new Intent();
-        i.setComponent(new ComponentName("tv.fun.settings",
-                "tv.fun.settings.picaudio.PicAudioSettingsActivity"));
-        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        try {
-            startActivity(i);
-            note("открыл экран изображения");
-        } catch (Throwable t) {
-            note("не смог открыть экран изображения: " + t);
-            return;
-        }
-        new Thread(new Runnable() {
-            public void run() {
-                for (int attempt = 0; attempt < 20; attempt++) {
-                    if (clickPictureItem()) {           // пробуем сразу, без паузы
-                        note("нажал верхний пункт настроек изображения");
-                        return;
-                    }
-                    try {
-                        Thread.sleep(120);
-                    } catch (InterruptedException ignored) {
-                    }
-                }
-                note("верхний пункт не нашёлся, экран остался открытым");
-            }
-        }).start();
-    }
-
     /** Ищет в текущем окне пункт про изображение и нажимает его. */
     private boolean clickPictureItem() {
         AccessibilityNodeInfo root = getRootInActiveWindow();
